@@ -30,6 +30,8 @@ export interface Product {
   status: string
 }
 
+export type ProductPayload = Omit<Product, 'id'>
+
 export interface Order {
   id: number
   order_no: string
@@ -47,6 +49,8 @@ export interface Order {
   after_sale_status: string
   product?: Product
 }
+
+export type OrderPayload = Omit<Order, 'id' | 'product'>
 
 export interface SessionItem {
   id: number
@@ -174,8 +178,16 @@ export const api = {
   getProducts: (keyword?: string) =>
     apiClient.get<Product[]>('/products', { params: { keyword: keyword || undefined } }).then((res) => res.data),
   getProduct: (id: number) => apiClient.get<Product>(`/products/${id}`).then((res) => res.data),
+  createProduct: (payload: ProductPayload) => apiClient.post<Product>('/products', payload).then((res) => res.data),
+  updateProduct: (id: number, payload: Partial<ProductPayload>) =>
+    apiClient.put<Product>(`/products/${id}`, payload).then((res) => res.data),
+  deleteProduct: (id: number) => apiClient.delete<Product>(`/products/${id}`).then((res) => res.data),
   getOrders: () => apiClient.get<Order[]>('/orders').then((res) => res.data),
   getOrder: (id: number) => apiClient.get<Order>(`/orders/${id}`).then((res) => res.data),
+  createOrder: (payload: OrderPayload) => apiClient.post<Order>('/orders', payload).then((res) => res.data),
+  updateOrder: (id: number, payload: Partial<OrderPayload>) =>
+    apiClient.put<Order>(`/orders/${id}`, payload).then((res) => res.data),
+  deleteOrder: (id: number) => apiClient.delete<Order>(`/orders/${id}`).then((res) => res.data),
   getSessions: () => apiClient.get<SessionItem[]>('/sessions').then((res) => res.data),
   getMessages: (sessionId: number) =>
     apiClient.get<MessageItem[]>(`/sessions/${sessionId}/messages`).then((res) => res.data),
@@ -205,4 +217,3 @@ export const api = {
   updateTicketStatus: (id: number, status: string, resolution?: string) =>
     apiClient.post<Ticket>(`/tickets/${id}/status`, { status, resolution }).then((res) => res.data)
 }
-

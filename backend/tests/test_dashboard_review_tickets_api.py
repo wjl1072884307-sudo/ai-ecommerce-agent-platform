@@ -38,3 +38,37 @@ def test_dashboard_review_and_ticket_flow(client: TestClient) -> None:
     assert ticket_update.status_code == 200
     assert ticket_update.json()["status"] == "processing"
 
+
+def test_dashboard_summary_excludes_soft_deleted_products_and_orders(client: TestClient) -> None:
+    product_response = client.post(
+        "/api/products",
+        json={
+            "name": "Dashboard 删除统计测试商品",
+            "sku": "DASHBOARD-DELETED-PRODUCT",
+            "category": "测试类目",
+            "price": 1.0,
+            "stock": 1,
+        },
+    )
+    order_response = client.post(
+        "/api/orders",
+        json={
+            "order_no": "DASHBOARD-DELETED-ORDER",
+            "user_id": 1,
+            "product_id": 1,
+            "quantity": 1,
+            "total_amount": 1.0,
+            "order_status": "paid",
+            "payment_status": "paid",
+            "logistics_status": "pending",
+            "after_sale_status": "none",
+        },
+    )
+
+    client.delete(f"/api/products/{product_response.json()['id']}")
+    client.delete(f"/api/orders/{order_response.json()['id']}")
+    summary = client.get("/api/dashboard/summary")
+
+    assert summary.status_code == 200
+    assert summary.json()["product_count"] == 3
+    assert summary.json()["order_count"] == 3

@@ -24,6 +24,8 @@ def list_products(
         query = query.filter(Product.category == category)
     if product_status:
         query = query.filter(Product.status == product_status)
+    else:
+        query = query.filter(Product.status != "deleted")
     return query.order_by(Product.id).offset(skip).limit(limit).all()
 
 
@@ -66,3 +68,14 @@ def update_product(product_id: int, payload: ProductUpdate, db: Session = Depend
     db.refresh(product)
     return product
 
+
+@router.delete("/{product_id}", response_model=ProductRead)
+def delete_product(product_id: int, db: Session = Depends(get_db)) -> Product:
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found.")
+
+    product.status = "deleted"
+    db.commit()
+    db.refresh(product)
+    return product

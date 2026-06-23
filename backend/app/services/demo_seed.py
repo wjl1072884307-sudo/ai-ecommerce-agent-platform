@@ -179,6 +179,15 @@ def seed_demo_data(db: Session) -> None:
                 "投诉类问题应创建人工审核任务，必要时升级给售后主管处理。"
             ),
         ),
+        KnowledgeDocument(
+            title="手机屏幕保护膜售后政策",
+            document_type="policy",
+            content=(
+                "手机屏幕保护膜、钢化膜、手机屏保等配件如出现边缘翘起、气泡、破损、无法贴合等问题，用户可在签收后 7 天内联系客服申请补发或更换。\n\n"
+                "如果保护膜已经明显人为损坏或超过售后期限，需要人工审核后判断是否支持补发。\n\n"
+                "手机配件补发类问题通常不直接退款，优先创建售后工单并记录用户诉求。"
+            ),
+        ),
     ]
     db.add_all(documents)
     db.flush()
@@ -190,8 +199,24 @@ def seed_demo_data(db: Session) -> None:
 
 def _extract_keywords(document_type: str, content: str) -> str:
     candidates = [document_type]
-    for keyword in ["退货", "退款", "耳机", "杂音", "质量问题", "物流", "投诉", "人工审核", "工单"]:
+    for keyword in [
+        "退货",
+        "退款",
+        "耳机",
+        "杂音",
+        "质量问题",
+        "物流",
+        "投诉",
+        "人工审核",
+        "工单",
+        "手机",
+        "屏保",
+        "保护膜",
+        "钢化膜",
+        "补发",
+        "更换",
+        "翘起",
+    ]:
         if keyword in content:
             candidates.append(keyword)
     return ",".join(dict.fromkeys(candidates))
-

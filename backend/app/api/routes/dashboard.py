@@ -16,8 +16,8 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummary:
 
     return DashboardSummary(
         session_count=db.query(CustomerSession).count(),
-        product_count=db.query(Product).count(),
-        order_count=db.query(Order).count(),
+        product_count=db.query(Product).filter(Product.status != "deleted").count(),
+        order_count=db.query(Order).filter(Order.order_status != "deleted").count(),
         pending_review_count=db.query(ReviewTask).filter(ReviewTask.status == "pending").count(),
         open_ticket_count=db.query(Ticket).filter(Ticket.status.in_(["open", "processing"])).count(),
         agent_run_count=agent_run_count,
@@ -42,4 +42,3 @@ def get_ticket_stats(db: Session = Depends(get_db)) -> list[StatItem]:
     for (ticket_status,) in rows:
         stats[ticket_status] = stats.get(ticket_status, 0) + 1
     return [StatItem(name=name, value=value) for name, value in sorted(stats.items())]
-

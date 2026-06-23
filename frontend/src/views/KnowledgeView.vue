@@ -19,7 +19,8 @@
           <n-space vertical>
             <n-input v-model:value="query" placeholder="输入退货相关问题" />
             <n-button type="primary" @click="search">检索</n-button>
-            <n-list bordered>
+            <n-empty v-if="searched && !chunks.length" description="暂无匹配的知识库 chunk" />
+            <n-list v-else bordered>
               <n-list-item v-for="chunk in chunks" :key="chunk.id">
                 <n-thing :title="chunk.document_title" :description="chunk.content" />
               </n-list-item>
@@ -45,7 +46,7 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
-import { NAlert, NButton, NCard, NDataTable, NDrawer, NDrawerContent, NGrid, NGridItem, NInput, NList, NListItem, NSpace, NThing } from 'naive-ui'
+import { NAlert, NButton, NCard, NDataTable, NDrawer, NDrawerContent, NEmpty, NGrid, NGridItem, NInput, NList, NListItem, NSpace, NThing } from 'naive-ui'
 
 import { api, type KnowledgeChunk, type KnowledgeDocument } from '@/api/client'
 
@@ -54,6 +55,7 @@ const selected = ref<KnowledgeDocument | null>(null)
 const chunks = ref<KnowledgeChunk[]>([])
 const query = ref('耳机有杂音，可以退货吗？')
 const showDrawer = ref(false)
+const searched = ref(false)
 
 const columns: DataTableColumns<KnowledgeDocument> = [
   { title: '标题', key: 'title' },
@@ -73,6 +75,7 @@ async function openDetail(id: number) {
 
 async function search() {
   chunks.value = await api.searchKnowledge(query.value)
+  searched.value = true
 }
 
 onMounted(async () => {
@@ -80,4 +83,3 @@ onMounted(async () => {
   await search()
 })
 </script>
-

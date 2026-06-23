@@ -127,7 +127,24 @@ def _to_search_result(chunk: KnowledgeChunk, document: KnowledgeDocument) -> Kno
 
 
 def _extract_search_terms(query: str) -> list[str]:
-    known_terms = ["退货", "退款", "耳机", "杂音", "质量问题", "物流", "投诉", "人工审核", "工单"]
+    known_terms = [
+        "退货",
+        "退款",
+        "耳机",
+        "杂音",
+        "质量问题",
+        "物流",
+        "投诉",
+        "人工审核",
+        "工单",
+        "手机",
+        "屏保",
+        "保护膜",
+        "钢化膜",
+        "补发",
+        "更换",
+        "翘起",
+    ]
     terms = [term.strip() for term in query.replace("，", " ").replace(",", " ").split() if term.strip()]
     terms.extend(term for term in known_terms if term in query)
     return list(dict.fromkeys(terms)) or [query.strip()]
