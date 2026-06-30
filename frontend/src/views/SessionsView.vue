@@ -1,16 +1,16 @@
 <template>
   <section class="sessions-page">
     <n-card class="session-list" size="small">
-      <template #header>会话列表</template>
+      <template #header>Sessions</template>
       <n-list clickable>
         <n-list-item v-for="item in sessions" :key="item.id" @click="selectSession(item.id)">
-          <n-thing :title="item.title" :description="`用户 ${item.user_id} · ${item.status}`" />
+          <n-thing :title="item.title" :description="`User ${item.user_id} / ${item.status}`" />
         </n-list-item>
       </n-list>
     </n-card>
 
     <n-card class="chat-panel" size="small">
-      <template #header>客服会话</template>
+      <template #header>Conversation</template>
       <div class="messages">
         <div v-for="item in messages" :key="item.id" class="message" :class="item.sender_type">
           <strong>{{ item.sender_type }}</strong>
@@ -18,24 +18,24 @@
         </div>
       </div>
       <div class="composer">
-        <n-input v-model:value="draft" type="textarea" :rows="2" placeholder="输入用户消息" />
-        <n-button type="primary" :loading="running" @click="sendAndRun">发送并触发 Agent</n-button>
+        <n-input v-model:value="draft" type="textarea" :rows="2" placeholder="Enter customer message" />
+        <n-button v-if="canRunAgent" type="primary" :loading="running" @click="sendAndRun">Send and Run Agent</n-button>
       </div>
     </n-card>
 
     <n-card class="result-panel" size="small">
-      <template #header>Agent 结果</template>
-      <n-empty v-if="!agentResult" description="尚未触发 Agent" />
+      <template #header>Agent Result</template>
+      <n-empty v-if="!agentResult" description="No Agent run yet" />
       <n-space v-else vertical>
-        <n-alert title="回复建议" type="success">
+        <n-alert title="Reply suggestion" type="success">
           {{ agentResult.reply_suggestion?.content }}
         </n-alert>
         <n-descriptions bordered :column="1" size="small">
-          <n-descriptions-item label="意图">{{ agentResult.run.intent }}</n-descriptions-item>
-          <n-descriptions-item label="运行状态">{{ agentResult.run.status }}</n-descriptions-item>
-          <n-descriptions-item label="审核任务">{{ agentResult.review_task?.status || '-' }}</n-descriptions-item>
-          <n-descriptions-item label="工单">{{ agentResult.ticket?.ticket_no || '-' }}</n-descriptions-item>
-          <n-descriptions-item label="工单类型">{{ agentResult.ticket?.ticket_type || '-' }}</n-descriptions-item>
+          <n-descriptions-item label="Intent">{{ agentResult.run.intent }}</n-descriptions-item>
+          <n-descriptions-item label="Status">{{ agentResult.run.status }}</n-descriptions-item>
+          <n-descriptions-item label="Review">{{ agentResult.review_task?.status || '-' }}</n-descriptions-item>
+          <n-descriptions-item label="Ticket">{{ agentResult.ticket?.ticket_no || '-' }}</n-descriptions-item>
+          <n-descriptions-item label="Ticket type">{{ agentResult.ticket?.ticket_type || '-' }}</n-descriptions-item>
         </n-descriptions>
       </n-space>
     </n-card>
@@ -43,18 +43,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { NAlert, NButton, NCard, NDescriptions, NDescriptionsItem, NEmpty, NInput, NList, NListItem, NSpace, NThing, useMessage } from 'naive-ui'
 
 import { api, type AgentRunResult, type MessageItem, type SessionItem } from '@/api/client'
+import { role } from '@/auth/session'
 
 const message = useMessage()
 const sessions = ref<SessionItem[]>([])
 const messages = ref<MessageItem[]>([])
 const selectedSessionId = ref<number | null>(null)
-const draft = ref('我买的耳机有杂音，可以退货吗？')
+const draft = ref('The headset I bought has noise. Can I return it?')
 const running = ref(false)
 const agentResult = ref<AgentRunResult | null>(null)
+const canRunAgent = computed(() => role.value === 'admin' || role.value === 'agent')
 
 async function loadSessions() {
   sessions.value = await api.getSessions()
@@ -75,7 +77,7 @@ async function sendAndRun() {
     const created = await api.sendMessage(selectedSessionId.value, draft.value.trim())
     messages.value.push(created)
     agentResult.value = await api.runAgent(selectedSessionId.value, created.id)
-    message.success('Agent 已完成处理')
+    message.success('Agent run completed')
   } finally {
     running.value = false
   }
@@ -122,4 +124,3 @@ onMounted(loadSessions)
   align-items: flex-end;
 }
 </style>
-

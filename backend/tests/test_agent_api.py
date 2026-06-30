@@ -53,7 +53,10 @@ def test_agent_logs_are_queryable(client: TestClient) -> None:
 def test_agent_endpoint_rejects_invalid_message(client: TestClient) -> None:
     response = client.post("/api/agent/runs", json={"session_id": 1, "message_id": 999})
 
-    assert response.status_code == 404
+    assert response.status_code == 201
+    data = response.json()
+    assert data["run"]["status"] == "failed"
+    assert data["failed_node"] == "receive_message"
 
 
 def test_agent_pipeline_writes_failed_node_log_for_invalid_message() -> None:

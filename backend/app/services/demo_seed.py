@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.models import (
     CustomerSession,
     KnowledgeChunk,
@@ -27,7 +28,7 @@ def rebuild_chunks(db: Session, document: KnowledgeDocument) -> None:
 
 
 def seed_demo_data(db: Session) -> None:
-    if db.query(User).filter(User.username == "customer_demo").first():
+    if db.query(User).filter(User.username == "admin_demo").first():
         return
 
     now = datetime.now()
@@ -35,14 +36,24 @@ def seed_demo_data(db: Session) -> None:
     customer = User(
         username="customer_demo",
         display_name="演示买家",
-        role="customer",
+        role="viewer",
+        password_hash=hash_password("customer123456"),
         phone="13800000001",
         email="customer@example.com",
+    )
+    admin = User(
+        username="admin_demo",
+        display_name="Admin Demo",
+        role="admin",
+        password_hash=hash_password("admin123456"),
+        phone="13800000000",
+        email="admin@example.com",
     )
     agent = User(
         username="agent_demo",
         display_name="演示客服",
         role="agent",
+        password_hash=hash_password("agent123456"),
         phone="13800000002",
         email="agent@example.com",
     )
@@ -50,10 +61,19 @@ def seed_demo_data(db: Session) -> None:
         username="reviewer_demo",
         display_name="售后主管",
         role="reviewer",
+        password_hash=hash_password("reviewer123456"),
         phone="13800000003",
         email="reviewer@example.com",
     )
-    db.add_all([customer, agent, reviewer])
+    viewer = User(
+        username="viewer_demo",
+        display_name="Viewer Demo",
+        role="viewer",
+        password_hash=hash_password("viewer123456"),
+        phone="13800000004",
+        email="viewer@example.com",
+    )
+    db.add_all([customer, admin, agent, reviewer, viewer])
     db.flush()
 
     headphones = Product(

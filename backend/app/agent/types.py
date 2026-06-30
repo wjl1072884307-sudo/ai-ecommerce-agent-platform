@@ -16,8 +16,11 @@ class AgentContext:
     matched_order: dict[str, Any] | None = None
     matched_product: dict[str, Any] | None = None
     knowledge_chunks: list[dict[str, Any]] = field(default_factory=list)
+    knowledge_sources: list[dict[str, Any]] = field(default_factory=list)
     policy_result: dict[str, Any] = field(default_factory=dict)
     risk_result: dict[str, Any] = field(default_factory=dict)
+    risk_actions: list[dict[str, Any]] = field(default_factory=list)
+    llm_result: dict[str, Any] = field(default_factory=dict)
     reply_suggestion_id: int | None = None
     review_task_id: int | None = None
     ticket_id: int | None = None
@@ -28,4 +31,3 @@ class NodeResult:
     status: str
     output: dict[str, Any] = field(default_factory=dict)
     error_message: str | None = None
-

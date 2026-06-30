@@ -11,22 +11,26 @@
       <div class="brand">
         <div class="brand-mark">AI</div>
         <div class="brand-text">
-          <strong>电商客服 Agent</strong>
+          <strong>Ecommerce Agent</strong>
           <span>After-sales Console</span>
         </div>
       </div>
-      <n-menu :value="activeKey" :options="menuOptions" @update:value="handleMenuSelect" />
+      <n-menu :value="activeKey" :options="visibleMenuOptions" @update:value="handleMenuSelect" />
     </n-layout-sider>
 
     <n-layout>
       <n-layout-header bordered class="admin-header">
         <div>
           <div class="header-title">{{ currentTitle }}</div>
-          <div class="header-meta">Mock 数据环境 · FastAPI + Vue3</div>
+          <div class="header-meta">{{ currentUser?.display_name || currentUser?.username }}</div>
         </div>
-        <n-tag :type="healthStatus === 'ok' ? 'success' : 'warning'" size="small">
-          API {{ healthStatus }}
-        </n-tag>
+        <div class="header-actions">
+          <n-tag :type="healthStatus === 'ok' ? 'success' : 'warning'" size="small">
+            API {{ healthStatus }}
+          </n-tag>
+          <n-tag size="small">{{ currentUser?.role || 'unknown' }}</n-tag>
+          <n-button size="small" secondary @click="logout">Logout</n-button>
+        </div>
       </n-layout-header>
       <n-layout-content class="admin-content">
         <RouterView />
@@ -39,30 +43,40 @@
 import { computed, h, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import type { MenuOption } from 'naive-ui'
-import { NLayout, NLayoutContent, NLayoutHeader, NLayoutSider, NMenu, NTag } from 'naive-ui'
+import { NButton, NLayout, NLayoutContent, NLayoutHeader, NLayoutSider, NMenu, NTag } from 'naive-ui'
 
 import { getHealth } from '@/api/client'
+import { clearSession, role, user, type UserRole } from '@/auth/session'
+
+type RoleMenuOption = MenuOption & { roles: UserRole[] }
 
 const route = useRoute()
 const router = useRouter()
 const healthStatus = ref('checking')
 
-const menuOptions: MenuOption[] = [
-  { label: () => h(RouterLink, { to: '/dashboard' }, { default: () => 'Dashboard' }), key: 'dashboard' },
-  { label: () => h(RouterLink, { to: '/products' }, { default: () => '商品管理' }), key: 'products' },
-  { label: () => h(RouterLink, { to: '/orders' }, { default: () => '订单管理' }), key: 'orders' },
-  { label: () => h(RouterLink, { to: '/sessions' }, { default: () => '客服会话' }), key: 'sessions' },
-  { label: () => h(RouterLink, { to: '/knowledge' }, { default: () => '知识库管理' }), key: 'knowledge' },
-  { label: () => h(RouterLink, { to: '/review-tasks' }, { default: () => '人工审核' }), key: 'review-tasks' },
-  { label: () => h(RouterLink, { to: '/tickets' }, { default: () => '售后工单' }), key: 'tickets' },
-  { label: () => h(RouterLink, { to: '/agent-logs' }, { default: () => 'Agent 运行日志' }), key: 'agent-logs' }
+const menuOptions: RoleMenuOption[] = [
+  { label: () => h(RouterLink, { to: '/dashboard' }, { default: () => 'Dashboard' }), key: 'dashboard', roles: ['admin', 'reviewer', 'agent', 'viewer'] },
+  { label: () => h(RouterLink, { to: '/products' }, { default: () => 'Products' }), key: 'products', roles: ['admin', 'reviewer', 'agent', 'viewer'] },
+  { label: () => h(RouterLink, { to: '/orders' }, { default: () => 'Orders' }), key: 'orders', roles: ['admin', 'reviewer', 'agent', 'viewer'] },
+  { label: () => h(RouterLink, { to: '/sessions' }, { default: () => 'Sessions' }), key: 'sessions', roles: ['admin', 'agent'] },
+  { label: () => h(RouterLink, { to: '/knowledge' }, { default: () => 'Knowledge' }), key: 'knowledge', roles: ['admin', 'reviewer', 'agent', 'viewer'] },
+  { label: () => h(RouterLink, { to: '/review-tasks' }, { default: () => 'Reviews' }), key: 'review-tasks', roles: ['admin', 'reviewer'] },
+  { label: () => h(RouterLink, { to: '/tickets' }, { default: () => 'Tickets' }), key: 'tickets', roles: ['admin', 'reviewer', 'agent', 'viewer'] },
+  { label: () => h(RouterLink, { to: '/agent-logs' }, { default: () => 'Agent Logs' }), key: 'agent-logs', roles: ['admin', 'reviewer', 'agent', 'viewer'] }
 ]
 
 const activeKey = computed(() => String(route.name ?? 'dashboard'))
 const currentTitle = computed(() => String(route.meta.title ?? 'Dashboard'))
+const currentUser = computed(() => user.value)
+const visibleMenuOptions = computed(() => menuOptions.filter((item) => role.value && item.roles.includes(role.value)))
 
 function handleMenuSelect(key: string) {
   router.push({ name: key })
+}
+
+function logout() {
+  clearSession()
+  router.replace('/login')
 }
 
 onMounted(async () => {
@@ -140,10 +154,15 @@ onMounted(async () => {
   font-size: 12px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .admin-content {
   min-height: calc(100vh - 64px);
   padding: 24px;
   background: #f4f6f8;
 }
 </style>
-

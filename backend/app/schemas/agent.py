@@ -86,4 +86,5 @@ class AgentRunResult(BaseModel):
     reply_suggestion: ReplySuggestionRead | None
     review_task: ReviewTaskRead | None
     ticket: TicketRead | None
-
+    failed_node: str | None = None
+    partial_context: dict | None = None

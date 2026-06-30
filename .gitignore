@@ -28,11 +28,15 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 
 # SQLite / local database
 *.db
 *.sqlite
 *.sqlite3
+backend/data/
 
 # IDE / OS
 .idea/

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import require_roles
 from app.database import get_db
 from app.models import Product
 from app.schemas import ProductCreate, ProductRead, ProductUpdate
@@ -8,7 +9,7 @@ from app.schemas import ProductCreate, ProductRead, ProductUpdate
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-@router.get("", response_model=list[ProductRead])
+@router.get("", response_model=list[ProductRead], dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def list_products(
     keyword: str | None = None,
     category: str | None = None,
@@ -29,7 +30,7 @@ def list_products(
     return query.order_by(Product.id).offset(skip).limit(limit).all()
 
 
-@router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_roles("admin"))])
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Product:
     if db.query(Product).filter(Product.sku == payload.sku).first():
         raise HTTPException(status_code=400, detail="Product SKU already exists.")
@@ -41,7 +42,7 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Pro
     return product
 
 
-@router.get("/{product_id}", response_model=ProductRead)
+@router.get("/{product_id}", response_model=ProductRead, dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def get_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     product = db.get(Product, product_id)
     if not product:
@@ -49,7 +50,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     return product
 
 
-@router.put("/{product_id}", response_model=ProductRead)
+@router.put("/{product_id}", response_model=ProductRead, dependencies=[Depends(require_roles("admin"))])
 def update_product(product_id: int, payload: ProductUpdate, db: Session = Depends(get_db)) -> Product:
     product = db.get(Product, product_id)
     if not product:
@@ -69,7 +70,7 @@ def update_product(product_id: int, payload: ProductUpdate, db: Session = Depend
     return product
 
 
-@router.delete("/{product_id}", response_model=ProductRead)
+@router.delete("/{product_id}", response_model=ProductRead, dependencies=[Depends(require_roles("admin"))])
 def delete_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     product = db.get(Product, product_id)
     if not product:

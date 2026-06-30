@@ -1,14 +1,16 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.agent.policies import build_risk_action
 from app.agent.types import AgentContext, NodeResult
+from app.llm.factory import get_llm_provider
+from app.llm.types import LLMMessage, LLMRequest
+from app.rag.factory import get_retriever
+from app.rag.types import RetrievalQuery
 from app.models import (
     CustomerSession,
-    KnowledgeChunk,
-    KnowledgeDocument,
     Message,
     Order,
     Product,
@@ -135,26 +137,28 @@ def retrieve_knowledge(db: Session, context: AgentContext) -> NodeResult:
     if context.matched_product:
         terms.extend([context.matched_product["name"], context.matched_product["category"]])
 
-    query = db.query(KnowledgeChunk, KnowledgeDocument).join(KnowledgeDocument)
-    filters = []
-    for term in dict.fromkeys(terms):
-        filters.append(KnowledgeChunk.content.ilike(f"%{term}%"))
-        filters.append(KnowledgeChunk.keywords.ilike(f"%{term}%"))
-        filters.append(KnowledgeDocument.title.ilike(f"%{term}%"))
-
-    rows = query.filter(or_(*filters)).order_by(KnowledgeChunk.id).limit(5).all() if filters else []
+    retriever = get_retriever(db)
+    results = retriever.retrieve(
+        RetrievalQuery(query=context.message_content or "", limit=5, terms=list(dict.fromkeys(terms)))
+    )
     context.knowledge_chunks = [
         {
-            "id": chunk.id,
-            "document_id": chunk.document_id,
-            "document_title": document.title,
-            "document_type": document.document_type,
-            "content": chunk.content,
-            "keywords": chunk.keywords,
+            "id": result.chunk_id,
+            "document_id": result.document_id,
+            "document_title": result.document_title,
+            "document_type": result.document_type,
+            "content": result.content,
+            "keywords": result.keywords,
+            "score": result.score,
+            "metadata": result.metadata,
         }
-        for chunk, document in rows
+        for result in results
     ]
-    return NodeResult(status="success", output={"knowledge_chunks": context.knowledge_chunks})
+    context.knowledge_sources = [result.to_source_dict() for result in results]
+    return NodeResult(
+        status="success",
+        output={"knowledge_chunks": context.knowledge_chunks, "sources": context.knowledge_sources},
+    )
 
 
 def check_policy(db: Session, context: AgentContext) -> NodeResult:
@@ -201,7 +205,7 @@ def check_policy(db: Session, context: AgentContext) -> NodeResult:
     return NodeResult(status="success", output=result)
 
 
-def risk_check(db: Session, context: AgentContext) -> NodeResult:
+def _legacy_risk_check(db: Session, context: AgentContext) -> NodeResult:
     reasons: list[str] = []
     risk_level = "low"
     need_review = False
@@ -231,6 +235,48 @@ def risk_check(db: Session, context: AgentContext) -> NodeResult:
         "need_review": need_review,
         "risk_level": risk_level,
         "risk_reasons": reasons,
+    }
+    return NodeResult(status="success", output=context.risk_result)
+
+
+def risk_check(db: Session, context: AgentContext) -> NodeResult:
+    reasons: list[str] = []
+    risk_level = "low"
+    need_review = False
+    content = context.message_content or ""
+    amount = context.matched_order["total_amount"] if context.matched_order else 0
+    context.risk_actions = []
+
+    if context.intent in {"return_request", "refund_request"}:
+        need_review = True
+        reasons.append("Return or refund requests require human review.")
+        action = "refund" if context.intent == "refund_request" else "approve_after_sale"
+        context.risk_actions.append(
+            build_risk_action(action, "After-sales financial or approval action requires review.")
+        )
+    if context.intent == "complaint" or any(term in content for term in ["投诉", "差评", "监管", "12315", "生气"]):
+        need_review = True
+        risk_level = "medium"
+        reasons.append("Complaint or strong negative sentiment requires escalation.")
+        context.risk_actions.append(build_risk_action("compensation", "Complaint handling may involve compensation."))
+    if amount >= 1000:
+        need_review = True
+        risk_level = "high"
+        reasons.append("High-value orders require human confirmation.")
+        context.risk_actions.append(build_risk_action("modify_order_amount", "High-value order decisions require review."))
+    if context.policy_result.get("is_over_after_sale_period"):
+        need_review = True
+        risk_level = "medium" if risk_level == "low" else risk_level
+        reasons.append("After-sales period may be exceeded.")
+
+    if need_review and risk_level == "low":
+        risk_level = "medium"
+
+    context.risk_result = {
+        "need_review": need_review,
+        "risk_level": risk_level,
+        "risk_reasons": reasons,
+        "risk_actions": context.risk_actions,
     }
     return NodeResult(status="success", output=context.risk_result)
 
@@ -267,6 +313,104 @@ def generate_reply(db: Session, context: AgentContext) -> NodeResult:
             "status": suggestion.status,
             "source_summary": suggestion.source_summary,
         },
+    )
+
+
+def generate_reply_llm(db: Session, context: AgentContext) -> NodeResult:
+    fallback_content = _build_fallback_reply(context)
+    llm_provider = "unknown"
+    llm_used = False
+    fallback_used = False
+    fallback_reason = None
+    content = fallback_content
+
+    try:
+        provider = get_llm_provider()
+        llm_provider = getattr(provider, "provider_name", provider.__class__.__name__)
+        response = provider.generate(_build_llm_request(context, fallback_content))
+        content = response.content
+        llm_provider = response.provider
+        llm_used = True
+        context.llm_result = {
+            "provider": response.provider,
+            "model": response.model,
+            "usage": response.usage,
+        }
+    except Exception as exc:
+        fallback_used = True
+        fallback_reason = str(exc)
+        context.llm_result = {"provider": llm_provider, "fallback_reason": fallback_reason}
+
+    source_summary = ", ".join(chunk["document_title"] for chunk in context.knowledge_chunks[:3]) or "Based on order and policy rules"
+    suggestion = ReplySuggestion(
+        run_id=context.run_id,
+        session_id=context.session_id,
+        message_id=context.message_id,
+        content=content,
+        intent=context.intent or "other",
+        confidence=context.confidence,
+        status="pending_review" if context.risk_result.get("need_review") else "draft",
+        source_summary=source_summary,
+    )
+    db.add(suggestion)
+    db.commit()
+    db.refresh(suggestion)
+    context.reply_suggestion_id = suggestion.id
+    return NodeResult(
+        status="success",
+        output={
+            "reply_suggestion_id": suggestion.id,
+            "content": suggestion.content,
+            "status": suggestion.status,
+            "source_summary": suggestion.source_summary,
+            "llm_used": llm_used,
+            "llm_provider": llm_provider,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
+        },
+    )
+
+
+def _build_fallback_reply(context: AgentContext) -> str:
+    order_no = context.matched_order["order_no"] if context.matched_order else "unmatched order"
+    product_name = context.matched_product["name"] if context.matched_product else "related product"
+    policy_reason = context.policy_result.get("reason", "We will further verify the after-sales policy.")
+    review_note = (
+        " This reply requires human review before sending."
+        if context.risk_result.get("need_review")
+        else " This reply can be sent as a draft suggestion."
+    )
+    return f"Hello, I found order {order_no} for {product_name}. {policy_reason}{review_note}"
+
+
+def _build_llm_request(context: AgentContext, fallback_content: str) -> LLMRequest:
+    knowledge_summary = "\n".join(
+        f"- {chunk['document_title']}: {chunk['content']}" for chunk in context.knowledge_chunks[:3]
+    )
+    return LLMRequest(
+        messages=[
+            LLMMessage(
+                role="system",
+                content=(
+                    "You are an ecommerce after-sales support assistant. "
+                    "Only draft a reply suggestion. Do not approve refunds, compensation, or ticket closure."
+                ),
+            ),
+            LLMMessage(
+                role="user",
+                content=(
+                    f"Customer message: {context.message_content or ''}\n"
+                    f"Intent: {context.intent or 'other'}\n"
+                    f"Order: {context.matched_order or {}}\n"
+                    f"Product: {context.matched_product or {}}\n"
+                    f"Policy result: {context.policy_result}\n"
+                    f"Risk result: {context.risk_result}\n"
+                    f"Knowledge sources:\n{knowledge_summary}\n"
+                    f"Fallback draft if provider fails: {fallback_content}"
+                ),
+            ),
+        ],
+        metadata={"run_id": context.run_id, "intent": context.intent},
     )
 
 
@@ -322,7 +466,7 @@ def create_ticket(db: Session, context: AgentContext) -> NodeResult:
         title=f"{ticket_type} 售后工单",
         description=context.message_content or "",
         priority=context.risk_result.get("risk_level", "medium"),
-        status="open",
+        status="pending",
     )
     db.add(ticket)
     db.commit()
@@ -380,4 +524,3 @@ def _product_to_dict(product: Product) -> dict[str, Any]:
         "price": product.price,
         "after_sale_policy": product.after_sale_policy,
     }
-

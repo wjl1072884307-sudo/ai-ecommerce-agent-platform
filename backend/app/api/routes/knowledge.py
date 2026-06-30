@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user, require_roles
+from app.audit.service import safe_record_audit_log
 from app.database import get_db
-from app.models import KnowledgeChunk, KnowledgeDocument
+from app.models import KnowledgeChunk, KnowledgeDocument, User
+from app.rag.factory import get_retriever
+from app.rag.types import RetrievalQuery
 from app.schemas import (
     KnowledgeDocumentCreate,
     KnowledgeDocumentDetailRead,
@@ -16,7 +19,7 @@ from app.services.demo_seed import rebuild_chunks
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 
-@router.get("/documents", response_model=list[KnowledgeDocumentRead])
+@router.get("/documents", response_model=list[KnowledgeDocumentRead], dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def list_documents(
     keyword: str | None = None,
     document_type: str | None = None,
@@ -35,18 +38,32 @@ def list_documents(
     return query.order_by(KnowledgeDocument.id).offset(skip).limit(limit).all()
 
 
-@router.post("/documents", response_model=KnowledgeDocumentDetailRead, status_code=status.HTTP_201_CREATED)
-def create_document(payload: KnowledgeDocumentCreate, db: Session = Depends(get_db)) -> KnowledgeDocument:
+@router.post("/documents", response_model=KnowledgeDocumentDetailRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_roles("admin"))])
+def create_document(
+    payload: KnowledgeDocumentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> KnowledgeDocument:
     document = KnowledgeDocument(**payload.model_dump())
     db.add(document)
     db.flush()
     rebuild_chunks(db, document)
+    safe_record_audit_log(
+        db=db,
+        action="knowledge.created",
+        resource_type="knowledge_document",
+        resource_id=document.id,
+        current_user=current_user,
+        request=request,
+        after={"title": document.title, "document_type": document.document_type, "status": document.status},
+    )
     db.commit()
     db.refresh(document)
     return document
 
 
-@router.get("/documents/{document_id}", response_model=KnowledgeDocumentDetailRead)
+@router.get("/documents/{document_id}", response_model=KnowledgeDocumentDetailRead, dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def get_document(document_id: int, db: Session = Depends(get_db)) -> KnowledgeDocument:
     document = db.get(KnowledgeDocument, document_id)
     if not document:
@@ -54,16 +71,23 @@ def get_document(document_id: int, db: Session = Depends(get_db)) -> KnowledgeDo
     return document
 
 
-@router.put("/documents/{document_id}", response_model=KnowledgeDocumentDetailRead)
+@router.put("/documents/{document_id}", response_model=KnowledgeDocumentDetailRead, dependencies=[Depends(require_roles("admin"))])
 def update_document(
     document_id: int,
     payload: KnowledgeDocumentUpdate,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> KnowledgeDocument:
     document = db.get(KnowledgeDocument, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Knowledge document not found.")
 
+    before = {
+        "title": document.title,
+        "document_type": document.document_type,
+        "status": document.status,
+    }
     update_data = payload.model_dump(exclude_unset=True)
     content_changed = "content" in update_data
     for field, value in update_data.items():
@@ -71,12 +95,27 @@ def update_document(
     if content_changed:
         rebuild_chunks(db, document)
 
+    safe_record_audit_log(
+        db=db,
+        action="knowledge.updated",
+        resource_type="knowledge_document",
+        resource_id=document.id,
+        current_user=current_user,
+        request=request,
+        before=before,
+        after={
+            "title": document.title,
+            "document_type": document.document_type,
+            "status": document.status,
+            "content_changed": content_changed,
+        },
+    )
     db.commit()
     db.refresh(document)
     return document
 
 
-@router.post("/documents/{document_id}/rebuild-chunks", response_model=list[KnowledgeSearchResult])
+@router.post("/documents/{document_id}/rebuild-chunks", response_model=list[KnowledgeSearchResult], dependencies=[Depends(require_roles("admin"))])
 def rebuild_document_chunks(document_id: int, db: Session = Depends(get_db)) -> list[KnowledgeSearchResult]:
     document = db.get(KnowledgeDocument, document_id)
     if not document:
@@ -88,26 +127,16 @@ def rebuild_document_chunks(document_id: int, db: Session = Depends(get_db)) -> 
     return [_to_search_result(chunk, document) for chunk in document.chunks]
 
 
-@router.get("/search", response_model=list[KnowledgeSearchResult])
+@router.get("/search", response_model=list[KnowledgeSearchResult], dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def search_knowledge(
     query: str,
     document_type: str | None = None,
     limit: int = 5,
     db: Session = Depends(get_db),
 ) -> list[KnowledgeSearchResult]:
-    chunk_query = db.query(KnowledgeChunk, KnowledgeDocument).join(KnowledgeDocument)
-    if document_type:
-        chunk_query = chunk_query.filter(KnowledgeDocument.document_type == document_type)
-
-    terms = _extract_search_terms(query)
-
-    filters = []
-    for term in terms:
-        filters.append(KnowledgeChunk.content.ilike(f"%{term}%"))
-        filters.append(KnowledgeChunk.keywords.ilike(f"%{term}%"))
-
-    rows = chunk_query.filter(or_(*filters)).order_by(KnowledgeChunk.id).limit(limit).all()
-    return [_to_search_result(chunk, document) for chunk, document in rows]
+    retriever = get_retriever(db)
+    results = retriever.retrieve(RetrievalQuery(query=query, document_type=document_type, limit=limit))
+    return [KnowledgeSearchResult.model_validate(result.to_search_result_dict()) for result in results]
 
 
 def _to_search_result(chunk: KnowledgeChunk, document: KnowledgeDocument) -> KnowledgeSearchResult:

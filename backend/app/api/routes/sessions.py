@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import require_roles
 from app.database import get_db
 from app.models import CustomerSession, Message, User
 from app.schemas import MessageCreate, MessageRead, SessionCreate, SessionRead
@@ -10,7 +11,7 @@ from app.schemas import MessageCreate, MessageRead, SessionCreate, SessionRead
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-@router.get("", response_model=list[SessionRead])
+@router.get("", response_model=list[SessionRead], dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def list_sessions(
     session_status: str | None = Query(default=None, alias="status"),
     user_id: int | None = None,
@@ -26,7 +27,7 @@ def list_sessions(
     return query.order_by(CustomerSession.id).offset(skip).limit(limit).all()
 
 
-@router.post("", response_model=SessionRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SessionRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_roles("admin", "agent"))])
 def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> CustomerSession:
     if not db.get(User, payload.user_id):
         raise HTTPException(status_code=404, detail="User not found.")
@@ -38,7 +39,7 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> Cus
     return session
 
 
-@router.get("/{session_id}", response_model=SessionRead)
+@router.get("/{session_id}", response_model=SessionRead, dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def get_session(session_id: int, db: Session = Depends(get_db)) -> CustomerSession:
     session = db.get(CustomerSession, session_id)
     if not session:
@@ -46,14 +47,14 @@ def get_session(session_id: int, db: Session = Depends(get_db)) -> CustomerSessi
     return session
 
 
-@router.get("/{session_id}/messages", response_model=list[MessageRead])
+@router.get("/{session_id}/messages", response_model=list[MessageRead], dependencies=[Depends(require_roles("admin", "reviewer", "agent", "viewer"))])
 def list_messages(session_id: int, db: Session = Depends(get_db)) -> list[Message]:
     if not db.get(CustomerSession, session_id):
         raise HTTPException(status_code=404, detail="Session not found.")
     return db.query(Message).filter(Message.session_id == session_id).order_by(Message.id).all()
 
 
-@router.post("/{session_id}/messages", response_model=MessageRead, status_code=status.HTTP_201_CREATED)
+@router.post("/{session_id}/messages", response_model=MessageRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_roles("admin", "agent"))])
 def create_message(session_id: int, payload: MessageCreate, db: Session = Depends(get_db)) -> Message:
     session = db.get(CustomerSession, session_id)
     if not session:

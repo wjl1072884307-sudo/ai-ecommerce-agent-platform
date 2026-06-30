@@ -2,30 +2,46 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Agent 运行日志</h1>
-        <p class="page-subtitle">查看 Agent run 和每个节点的输入输出。</p>
+        <h1 class="page-title">Agent Logs</h1>
+        <p class="page-subtitle">Inspect Agent runs, node timing, errors, fallback markers, and sources.</p>
       </div>
-      <n-button secondary @click="loadRuns">刷新</n-button>
+      <n-button secondary @click="loadRuns">Refresh</n-button>
     </div>
 
     <n-grid :cols="2" :x-gap="16" responsive="screen">
       <n-grid-item>
-        <n-card title="运行记录" size="small">
+        <n-card title="Runs" size="small">
           <n-data-table :columns="columns" :data="runs" :pagination="{ pageSize: 8 }" />
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="节点日志" size="small">
-          <n-empty v-if="!logs.length" description="选择一条运行记录" />
+        <n-card title="Node Logs" size="small">
+          <n-empty v-if="!logs.length" description="Select a run" />
           <n-timeline v-else>
-            <n-timeline-item v-for="log in logs" :key="log.id" :title="`${log.node_name} · ${log.status}`">
-              <n-collapse>
-                <n-collapse-item title="输入输出 JSON">
-                  <pre>{{ formatJson(log.input_json) }}</pre>
-                  <pre>{{ formatJson(log.output_json) }}</pre>
-                  <n-alert v-if="log.error_message" type="error">{{ log.error_message }}</n-alert>
-                </n-collapse-item>
-              </n-collapse>
+            <n-timeline-item
+              v-for="log in logs"
+              :key="log.id"
+              :type="timelineType(log.status)"
+              :title="log.node_name"
+              :time="durationText(log)"
+            >
+              <n-space vertical>
+                <n-space>
+                  <n-tag size="small" :type="tagType(log.status)">{{ log.status }}</n-tag>
+                  <n-tag v-if="hasFallback(log)" size="small" type="warning">fallback</n-tag>
+                  <n-tag v-if="hasSources(log)" size="small" type="info">sources</n-tag>
+                  <n-tag v-if="isHighRisk(log)" size="small" type="error">high risk</n-tag>
+                </n-space>
+                <n-alert v-if="log.error_message" type="error">{{ log.error_message }}</n-alert>
+                <n-collapse>
+                  <n-collapse-item title="Input JSON">
+                    <pre>{{ formatJson(log.input_json) }}</pre>
+                  </n-collapse-item>
+                  <n-collapse-item title="Output JSON">
+                    <pre>{{ formatJson(log.output_json) }}</pre>
+                  </n-collapse-item>
+                </n-collapse>
+              </n-space>
             </n-timeline-item>
           </n-timeline>
         </n-card>
@@ -37,7 +53,7 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
-import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NEmpty, NGrid, NGridItem, NTimeline, NTimelineItem } from 'naive-ui'
+import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NEmpty, NGrid, NGridItem, NSpace, NTag, NTimeline, NTimelineItem } from 'naive-ui'
 
 import { api, type AgentNodeLog, type AgentRun } from '@/api/client'
 
@@ -46,10 +62,10 @@ const logs = ref<AgentNodeLog[]>([])
 
 const columns: DataTableColumns<AgentRun> = [
   { title: 'Run', key: 'id', width: 70 },
-  { title: '意图', key: 'intent' },
-  { title: '状态', key: 'status' },
-  { title: '摘要', key: 'summary' },
-  { title: '操作', key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => loadLogs(row.id) }, { default: () => '日志' }) }
+  { title: 'Intent', key: 'intent' },
+  { title: 'Status', key: 'status' },
+  { title: 'Summary', key: 'summary' },
+  { title: 'Actions', key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => loadLogs(row.id) }, { default: () => 'Logs' }) }
 ]
 
 async function loadRuns() {
@@ -70,6 +86,46 @@ function formatJson(value: string | null) {
   }
 }
 
+function parsedOutput(log: AgentNodeLog) {
+  if (!log.output_json) return null
+  try {
+    return JSON.parse(log.output_json)
+  } catch {
+    return null
+  }
+}
+
+function hasFallback(log: AgentNodeLog) {
+  const output = parsedOutput(log)
+  return Boolean(output?.fallback || output?.llm_fallback || output?.used_fallback)
+}
+
+function hasSources(log: AgentNodeLog) {
+  const output = parsedOutput(log)
+  return Array.isArray(output?.sources) && output.sources.length > 0
+}
+
+function isHighRisk(log: AgentNodeLog) {
+  const output = parsedOutput(log)
+  return output?.risk_level === 'high' || output?.requires_review === true
+}
+
+function durationText(log: AgentNodeLog) {
+  return log.duration_ms === null || log.duration_ms === undefined ? undefined : `${log.duration_ms} ms`
+}
+
+function tagType(status: string) {
+  if (status === 'success' || status === 'completed') return 'success'
+  if (status === 'failed' || status === 'error') return 'error'
+  return 'default'
+}
+
+function timelineType(status: string) {
+  if (status === 'failed' || status === 'error') return 'error'
+  if (status === 'success' || status === 'completed') return 'success'
+  return 'default'
+}
+
 onMounted(loadRuns)
 </script>
 
@@ -85,4 +141,3 @@ pre {
   white-space: pre-wrap;
 }
 </style>
-

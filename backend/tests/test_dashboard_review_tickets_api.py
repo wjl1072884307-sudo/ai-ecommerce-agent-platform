@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+﻿from fastapi.testclient import TestClient
 
 
 def test_dashboard_review_and_ticket_flow(client: TestClient) -> None:
@@ -18,7 +18,7 @@ def test_dashboard_review_and_ticket_flow(client: TestClient) -> None:
     assert intent_stats.status_code == 200
     assert intent_stats.json()[0]["name"] == "return_request"
     assert ticket_stats.status_code == 200
-    assert ticket_stats.json()[0]["name"] == "open"
+    assert ticket_stats.json()[0]["name"] == "pending"
     assert review_tasks.status_code == 200
     assert review_tasks.json()[0]["id"] == review_task_id
     assert tickets.status_code == 200
@@ -26,11 +26,11 @@ def test_dashboard_review_and_ticket_flow(client: TestClient) -> None:
 
     approve = client.post(
         f"/api/review-tasks/{review_task_id}/approve",
-        json={"reviewer_id": 3, "review_comment": "确认可退货。"},
+        json={"reviewer_id": 3, "review_comment": "approved"},
     )
     ticket_update = client.post(
         f"/api/tickets/{ticket_id}/status",
-        json={"status": "processing", "resolution": "已进入售后处理。"},
+        json={"status": "processing", "reason": "start handling", "resolution": "start after-sale handling"},
     )
 
     assert approve.status_code == 200
@@ -43,9 +43,9 @@ def test_dashboard_summary_excludes_soft_deleted_products_and_orders(client: Tes
     product_response = client.post(
         "/api/products",
         json={
-            "name": "Dashboard 删除统计测试商品",
+            "name": "Dashboard deleted product",
             "sku": "DASHBOARD-DELETED-PRODUCT",
-            "category": "测试类目",
+            "category": "test",
             "price": 1.0,
             "stock": 1,
         },

@@ -130,3 +130,148 @@ http://127.0.0.1:8000/docs
 - [TASKS.md](TASKS.md)：阶段化开发任务与验收标准
 - [docs/INTERVIEW_DEMO.md](docs/INTERVIEW_DEMO.md)：3 分钟面试演示脚本
 
+## Docker Compose MVP Run
+
+The production-like MVP stack contains PostgreSQL, backend, and frontend.
+Copy `.env.example` to `.env`, change `JWT_SECRET_KEY` and database passwords
+before any real deployment, then start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+Initialize demo data explicitly after the services are running:
+
+```bash
+docker compose exec backend python scripts/init_db.py --reset
+```
+
+Do not automate `--reset` in production. It drops and recreates tables.
+
+Service URLs:
+
+```text
+Frontend: http://127.0.0.1:8080
+Backend health: http://127.0.0.1:8000/api/health
+Backend docs: http://127.0.0.1:8000/docs
+```
+
+Useful compose commands:
+
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose down
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Browser[Vue 3 + Naive UI] --> Nginx[Nginx frontend container]
+  Nginx --> FastAPI[FastAPI backend]
+  FastAPI --> Postgres[(PostgreSQL)]
+  FastAPI --> Agent[Agent Pipeline]
+  Agent --> Retriever[KeywordRetriever]
+  Agent --> LLM[Mock or OpenAI-compatible LLM Provider]
+```
+
+The application is a single FastAPI backend and a Vue 3 admin console. V1.0
+keeps the monolith backend, SQLite for local demo startup, PostgreSQL for
+Docker/production-like deployment, and mock LLM behavior by default.
+
+## Tech Stack
+
+- Backend: Python, FastAPI, SQLAlchemy, Pydantic, Alembic, pytest.
+- Database: SQLite for local development, PostgreSQL for deployment.
+- Agent: node-based pipeline, LLM provider abstraction, Retriever abstraction.
+- Frontend: Vue 3, Vite, Vue Router, Axios, Naive UI, ECharts.
+- Deployment: Docker, Docker Compose, Nginx.
+
+## Local Startup
+
+Backend:
+
+```bash
+cd backend
+python -m pip install -r requirements.txt
+python scripts/init_db.py --reset
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`.
+
+## Default Accounts
+
+| Username | Password | Role |
+| --- | --- | --- |
+| `admin_demo` | `admin123456` | admin |
+| `reviewer_demo` | `reviewer123456` | reviewer |
+| `agent_demo` | `agent123456` | agent |
+| `viewer_demo` | `viewer123456` | viewer |
+
+## Demo Flow
+
+1. Sign in as `admin_demo`.
+2. Open Sessions.
+3. Send the default after-sales message and run Agent.
+4. Confirm the reply suggestion, review task, ticket, and node logs are created.
+5. Open Review Tasks and approve or reject the review.
+6. Open Tickets, claim a ticket, change status, and inspect the timeline.
+7. Open Agent Logs and inspect node input/output JSON.
+
+## Core API
+
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/products`
+- `GET /api/orders`
+- `GET /api/sessions`
+- `POST /api/sessions/{session_id}/messages`
+- `GET /api/knowledge/search`
+- `POST /api/agent/runs`
+- `GET /api/agent/runs/{run_id}/node-logs`
+- `GET /api/review-tasks`
+- `POST /api/review-tasks/{task_id}/approve`
+- `GET /api/tickets`
+- `POST /api/tickets/{ticket_id}/status`
+- `GET /api/dashboard/summary`
+- `GET /api/audit-logs`
+
+## Testing
+
+Backend targeted tests:
+
+```bash
+python -m pytest backend/tests/test_phase11_documents.py -v
+```
+
+Frontend build:
+
+```bash
+cd frontend
+npm run build
+```
+
+Full backend tests are still available with:
+
+```bash
+python -m pytest backend/tests
+```
+
+## Additional Design Documents
+
+- [DEPLOYMENT.md](DEPLOYMENT.md)
+- [ONLINE_UPGRADE_PLAN.md](ONLINE_UPGRADE_PLAN.md)
+- [API_DESIGN.md](API_DESIGN.md)
+- [DATABASE_DESIGN.md](DATABASE_DESIGN.md)
+- [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md)
+- [RAG_UPGRADE_PLAN.md](RAG_UPGRADE_PLAN.md)

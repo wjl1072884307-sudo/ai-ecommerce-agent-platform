@@ -46,4 +46,5 @@ class KnowledgeDocumentDetailRead(KnowledgeDocumentRead):
 class KnowledgeSearchResult(KnowledgeChunkRead):
     document_title: str
     document_type: str
-
+    score: float = 0.0
+    metadata: dict = {}

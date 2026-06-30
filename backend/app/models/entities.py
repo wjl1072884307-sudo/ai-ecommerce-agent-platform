@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -22,6 +22,7 @@ class User(TimestampMixin, Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(100))
     role: Mapped[str] = mapped_column(String(20), index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), default="")
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     email: Mapped[str | None] = mapped_column(String(120), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
@@ -84,6 +85,7 @@ class CustomerSession(TimestampMixin, Base):
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (Index("ix_messages_session_created_at", "session_id", "created_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), index=True)
@@ -149,6 +151,7 @@ class AgentRun(Base):
 
 class AgentNodeLog(Base):
     __tablename__ = "agent_node_logs"
+    __table_args__ = (Index("ix_agent_node_logs_run_node", "run_id", "node_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("agent_runs.id"), index=True)
@@ -197,6 +200,10 @@ class ReviewTask(TimestampMixin, Base):
 
 class Ticket(TimestampMixin, Base):
     __tablename__ = "tickets"
+    __table_args__ = (
+        Index("ix_tickets_status_assignee", "status", "assignee_id"),
+        Index("ix_tickets_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     ticket_no: Mapped[str] = mapped_column(String(80), unique=True, index=True)
@@ -208,10 +215,45 @@ class Ticket(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text)
     priority: Mapped[str] = mapped_column(String(20), default="medium", index=True)
-    status: Mapped[str] = mapped_column(String(30), default="open", index=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     order: Mapped[Order | None] = relationship(back_populates="tickets")
+    status_logs: Mapped[list["TicketStatusLog"]] = relationship(
+        back_populates="ticket",
+        cascade="all, delete-orphan",
+    )
 
+
+class TicketStatusLog(Base):
+    __tablename__ = "ticket_status_logs"
+    __table_args__ = (Index("ix_ticket_status_logs_ticket_created_at", "ticket_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    from_status: Mapped[str] = mapped_column(String(30), index=True)
+    to_status: Mapped[str] = mapped_column(String(30), index=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    ticket: Mapped[Ticket] = relationship(back_populates="status_logs")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    operator_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    operator_role: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    resource_type: Mapped[str] = mapped_column(String(80), index=True)
+    resource_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)

@@ -1,6 +1,7 @@
 from app.models.entities import (
     AgentNodeLog,
     AgentRun,
+    AuditLog,
     CustomerSession,
     KnowledgeChunk,
     KnowledgeDocument,
@@ -10,12 +11,14 @@ from app.models.entities import (
     ReplySuggestion,
     ReviewTask,
     Ticket,
+    TicketStatusLog,
     User,
 )
 
 __all__ = [
     "AgentNodeLog",
     "AgentRun",
+    "AuditLog",
     "CustomerSession",
     "KnowledgeChunk",
     "KnowledgeDocument",
@@ -25,5 +28,6 @@ __all__ = [
     "ReplySuggestion",
     "ReviewTask",
     "Ticket",
+    "TicketStatusLog",
     "User",
 ]

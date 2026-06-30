@@ -51,7 +51,8 @@ def test_seed_demo_data_is_repeatable_and_contains_return_scenario() -> None:
     seed_demo_data(db)
     seed_demo_data(db)
 
-    assert db.query(User).count() == 3
+    assert db.query(User).count() == 5
+    assert {user.role for user in db.query(User).all()} == {"admin", "reviewer", "agent", "viewer"}
     assert db.query(Product).count() == 3
     assert db.query(Order).count() == 3
 
@@ -64,4 +65,3 @@ def test_seed_demo_data_is_repeatable_and_contains_return_scenario() -> None:
     assert order.after_sale_status == "none"
     assert "杂音" in policy.content
     assert chunk_count >= 3
-
