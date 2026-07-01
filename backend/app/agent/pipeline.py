@@ -16,7 +16,7 @@ from app.agent.nodes import (
     risk_check,
 )
 from app.agent.types import AgentContext, NodeResult
-from app.models import AgentRun, ReplySuggestion, ReviewTask, Ticket
+from app.models import AgentRun, CustomerSession, ReplySuggestion, ReviewTask, Ticket
 
 NODE_SEQUENCE = [
     ("receive_message", receive_message),
@@ -32,10 +32,11 @@ NODE_SEQUENCE = [
 
 
 def run_agent(db: Session, session_id: int, message_id: int) -> dict[str, Any]:
+    session = db.get(CustomerSession, session_id)
     run = AgentRun(
         session_id=session_id,
         message_id=message_id,
-        user_id=0,
+        user_id=session.user_id if session else 0,
         status="running",
         started_at=datetime.now(),
     )

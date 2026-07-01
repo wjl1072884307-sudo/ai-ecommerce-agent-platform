@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -80,3 +80,24 @@ def test_agent_pipeline_writes_failed_node_log_for_invalid_message() -> None:
         assert failed_log.node_name == "receive_message"
         assert failed_log.status == "failed"
         assert failed_log.error_message == "Message or session not found."
+
+
+def test_agent_pipeline_uses_existing_user_before_initial_commit() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(dbapi_connection, _connection_record):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    with TestingSessionLocal() as db:
+        seed_demo_data(db)
+        result = run_agent(db, session_id=1, message_id=1)
+
+        assert result["run"].user_id != 0
