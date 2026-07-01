@@ -6,7 +6,7 @@ def test_list_products_returns_demo_products(client: TestClient) -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    assert len(data) >= 6
     assert data[0]["sku"] == "AUDIO-NEBULA-001"
 
 

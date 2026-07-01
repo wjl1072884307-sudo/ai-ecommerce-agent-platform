@@ -32,8 +32,20 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)) -> Cus
     if not db.get(User, payload.user_id):
         raise HTTPException(status_code=404, detail="User not found.")
 
-    session = CustomerSession(**payload.model_dump())
+    data = payload.model_dump(exclude={"initial_message"})
+    session = CustomerSession(**data)
     db.add(session)
+    db.flush()
+    if payload.initial_message and payload.initial_message.strip():
+        session.last_message_at = datetime.now()
+        db.add(
+            Message(
+                session_id=session.id,
+                sender_id=payload.user_id,
+                sender_type="customer",
+                content=payload.initial_message.strip(),
+            )
+        )
     db.commit()
     db.refresh(session)
     return session

@@ -75,6 +75,13 @@ export interface SessionItem {
   last_message_at: string | null
 }
 
+export interface SessionPayload {
+  user_id: number
+  title: string
+  status?: string
+  initial_message?: string
+}
+
 export interface MessageItem {
   id: number
   session_id: number
@@ -227,6 +234,7 @@ export const api = {
     apiClient.put<Order>(`/orders/${id}`, payload).then((res) => res.data),
   deleteOrder: (id: number) => apiClient.delete<Order>(`/orders/${id}`).then((res) => res.data),
   getSessions: () => apiClient.get<SessionItem[]>('/sessions').then((res) => res.data),
+  createSession: (payload: SessionPayload) => apiClient.post<SessionItem>('/sessions', payload).then((res) => res.data),
   getMessages: (sessionId: number) =>
     apiClient.get<MessageItem[]>(`/sessions/${sessionId}/messages`).then((res) => res.data),
   sendMessage: (sessionId: number, content: string, senderId = 1) =>

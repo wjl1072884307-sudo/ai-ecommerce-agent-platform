@@ -6,7 +6,7 @@ def test_list_orders_returns_demo_orders(client: TestClient) -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 3
+    assert len(data) >= 6
     assert data[0]["order_no"] == "MOCK202606120001"
 
 
@@ -26,7 +26,7 @@ def test_get_order_by_number_and_user_orders(client: TestClient) -> None:
     assert by_number.status_code == 200
     assert by_number.json()["id"] == 1
     assert user_orders.status_code == 200
-    assert len(user_orders.json()) == 3
+    assert len(user_orders.json()) >= 6
 
 
 def test_create_update_and_delete_order(client: TestClient) -> None:

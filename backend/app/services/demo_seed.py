@@ -103,7 +103,43 @@ def seed_demo_data(db: Session) -> None:
         stock=80,
         after_sale_policy="支持 7 天无理由退货，影响二次销售除外。",
     )
-    db.add_all([headphones, phone, keyboard])
+    monitor = Product(
+        name="Aurora 27-inch Monitor",
+        sku="MONITOR-AURORA-027",
+        category="Computer Display",
+        description="27-inch 2K office monitor with adjustable stand.",
+        price=1299.0,
+        stock=42,
+        after_sale_policy="Supports 7-day return and 15-day exchange for quality issues.",
+    )
+    smartwatch = Product(
+        name="Pulse Fit Smartwatch",
+        sku="WATCH-PULSE-FIT",
+        category="Wearable",
+        description="Smartwatch with heart-rate monitoring and long battery mode.",
+        price=699.0,
+        stock=66,
+        after_sale_policy="Battery or sensor issues can enter warranty review within 15 days.",
+    )
+    charger = Product(
+        name="GaN Fast Charger 65W",
+        sku="CHARGER-GAN-065",
+        category="Phone Accessory",
+        description="Dual-port 65W fast charger for phone and laptop charging.",
+        price=159.0,
+        stock=150,
+        after_sale_policy="Accessories support replacement for verified charging failures.",
+    )
+    speaker = Product(
+        name="Mini Bluetooth Speaker",
+        sku="SPEAKER-MINI-BT",
+        category="Audio",
+        description="Portable Bluetooth speaker with waterproof shell.",
+        price=199.0,
+        stock=95,
+        after_sale_policy="Audio distortion or connection failures can request exchange.",
+    )
+    db.add_all([headphones, phone, keyboard, monitor, smartwatch, charger, speaker])
     db.flush()
 
     db.add_all(
@@ -152,6 +188,63 @@ def seed_demo_data(db: Session) -> None:
                 delivered_at=now - timedelta(days=17),
                 after_sale_status="done",
             ),
+            Order(
+                order_no="MOCK202606120004",
+                user_id=customer.id,
+                product_id=monitor.id,
+                quantity=1,
+                total_amount=1299.0,
+                order_status="shipped",
+                payment_status="paid",
+                logistics_status="in_transit",
+                tracking_no="SF1000000004",
+                paid_at=now - timedelta(days=1),
+                shipped_at=now - timedelta(hours=12),
+                after_sale_status="none",
+            ),
+            Order(
+                order_no="MOCK202606120005",
+                user_id=customer.id,
+                product_id=smartwatch.id,
+                quantity=1,
+                total_amount=699.0,
+                order_status="delivered",
+                payment_status="paid",
+                logistics_status="delivered",
+                tracking_no="JD1000000005",
+                paid_at=now - timedelta(days=9),
+                shipped_at=now - timedelta(days=8),
+                delivered_at=now - timedelta(days=6),
+                after_sale_status="reviewing",
+            ),
+            Order(
+                order_no="MOCK202606120006",
+                user_id=customer.id,
+                product_id=charger.id,
+                quantity=2,
+                total_amount=318.0,
+                order_status="paid",
+                payment_status="paid",
+                logistics_status="pending",
+                tracking_no=None,
+                paid_at=now - timedelta(hours=6),
+                after_sale_status="none",
+            ),
+            Order(
+                order_no="MOCK202606120007",
+                user_id=customer.id,
+                product_id=speaker.id,
+                quantity=1,
+                total_amount=199.0,
+                order_status="delivered",
+                payment_status="refunded",
+                logistics_status="delivered",
+                tracking_no="YT1000000007",
+                paid_at=now - timedelta(days=18),
+                shipped_at=now - timedelta(days=17),
+                delivered_at=now - timedelta(days=15),
+                after_sale_status="done",
+            ),
         ]
     )
 
@@ -172,6 +265,51 @@ def seed_demo_data(db: Session) -> None:
             message_type="text",
         )
     )
+
+    extra_session_specs = [
+        (
+            "Monitor logistics delay",
+            "My monitor has shipped but tracking has not updated. Can you check it?",
+            "open",
+            1,
+        ),
+        (
+            "Smartwatch battery complaint",
+            "The smartwatch battery drains too fast and I want after-sales support.",
+            "open",
+            2,
+        ),
+        (
+            "Charger invoice request",
+            "I bought two chargers and need help with invoice and delivery timing.",
+            "open",
+            3,
+        ),
+        (
+            "Speaker refund follow-up",
+            "The speaker refund is marked complete, but I have not received the money.",
+            "closed",
+            4,
+        ),
+    ]
+    for title, content, session_status, offset in extra_session_specs:
+        extra_session = CustomerSession(
+            user_id=customer.id,
+            title=title,
+            status=session_status,
+            last_message_at=now - timedelta(minutes=offset * 8),
+        )
+        db.add(extra_session)
+        db.flush()
+        db.add(
+            Message(
+                session_id=extra_session.id,
+                sender_id=customer.id,
+                sender_type="customer",
+                content=content,
+                message_type="text",
+            )
+        )
 
     documents = [
         KnowledgeDocument(

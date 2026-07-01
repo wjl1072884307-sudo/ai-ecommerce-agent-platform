@@ -9,6 +9,7 @@ class SessionCreate(BaseModel):
     user_id: int
     title: str
     status: str = "open"
+    initial_message: str | None = None
 
 
 class SessionRead(TimestampedModel):
@@ -36,4 +37,3 @@ class MessageRead(ORMModel):
     message_type: str
     metadata_json: str | None
     created_at: datetime
-
