@@ -130,6 +130,11 @@ http://127.0.0.1:8000/docs
 - [TASKS.md](TASKS.md)：阶段化开发任务与验收标准
 - [docs/INTERVIEW_DEMO.md](docs/INTERVIEW_DEMO.md)：3 分钟面试演示脚本
 
+## V1.1 Conversation Center Documents
+
+- [TASKS_ONLINE_V1.1.md](TASKS_ONLINE_V1.1.md): conversation center productization phases.
+- [docs/CONVERSATION_CENTER_V1_1.md](docs/CONVERSATION_CENTER_V1_1.md): V1.1 conversation center product model and data-boundary decisions.
+
 ## Docker Compose MVP Run
 
 The production-like MVP stack contains PostgreSQL, backend, and frontend.

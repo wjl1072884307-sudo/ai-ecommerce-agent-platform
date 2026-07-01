@@ -2,10 +2,10 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Dashboard</h1>
-        <p class="page-subtitle">客服业务、售后处理和 Agent 运行状态概览。</p>
+        <h1 class="page-title">{{ t('dashboard.title') }}</h1>
+        <p class="page-subtitle">{{ t('dashboard.subtitle') }}</p>
       </div>
-      <n-button secondary @click="loadDashboard">刷新</n-button>
+      <n-button secondary @click="loadDashboard">{{ t('common.refresh') }}</n-button>
     </div>
 
     <n-grid :cols="4" :x-gap="16" :y-gap="16" responsive="screen">
@@ -18,32 +18,36 @@
 
     <n-grid :cols="2" :x-gap="16" :y-gap="16" responsive="screen">
       <n-grid-item>
-        <n-card title="意图分布" size="small">
+        <n-card :title="t('dashboard.intentDistribution')" size="small">
           <div ref="intentChartRef" class="chart"></div>
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="工单状态" size="small">
+        <n-card :title="t('dashboard.ticketStatus')" size="small">
           <div ref="ticketChartRef" class="chart"></div>
         </n-card>
       </n-grid-item>
     </n-grid>
 
-    <n-card title="最近 Agent 运行记录" size="small">
+    <n-card :title="t('dashboard.recentRuns')" size="small">
       <n-data-table :columns="columns" :data="runs" :pagination="{ pageSize: 6 }" />
     </n-card>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { DataTableColumns } from 'naive-ui'
 import { NButton, NCard, NDataTable, NGrid, NGridItem, NStatistic, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api, type AgentRun, type StatItem } from '@/api/client'
+import { useDisplayText } from '@/i18n/display'
 
 const message = useMessage()
+const { t, locale } = useI18n()
+const { statusLabel } = useDisplayText()
 const summary = ref<Record<string, number>>({})
 const intentStats = ref<StatItem[]>([])
 const ticketStats = ref<StatItem[]>([])
@@ -52,23 +56,23 @@ const intentChartRef = ref<HTMLDivElement | null>(null)
 const ticketChartRef = ref<HTMLDivElement | null>(null)
 
 const metrics = computed(() => [
-  { label: '会话数', value: summary.value.session_count ?? 0 },
-  { label: '商品数', value: summary.value.product_count ?? 0 },
-  { label: '订单数', value: summary.value.order_count ?? 0 },
-  { label: '待审核', value: summary.value.pending_review_count ?? 0 },
-  { label: '待处理工单', value: summary.value.open_ticket_count ?? 0 },
-  { label: 'Agent Runs', value: summary.value.agent_run_count ?? 0 },
-  { label: '成功率', value: `${Math.round((summary.value.agent_success_rate ?? 0) * 100)}%` },
-  { label: '节点数', value: 9 }
+  { label: t('dashboard.sessionCount'), value: summary.value.session_count ?? 0 },
+  { label: t('dashboard.productCount'), value: summary.value.product_count ?? 0 },
+  { label: t('dashboard.orderCount'), value: summary.value.order_count ?? 0 },
+  { label: t('dashboard.pendingReviews'), value: summary.value.pending_review_count ?? 0 },
+  { label: t('dashboard.openTickets'), value: summary.value.open_ticket_count ?? 0 },
+  { label: t('dashboard.agentRuns'), value: summary.value.agent_run_count ?? 0 },
+  { label: t('dashboard.successRate'), value: `${Math.round((summary.value.agent_success_rate ?? 0) * 100)}%` },
+  { label: t('dashboard.nodeCount'), value: 9 }
 ])
 
-const columns: DataTableColumns<AgentRun> = [
-  { title: 'Run ID', key: 'id', width: 80 },
-  { title: '意图', key: 'intent' },
-  { title: '状态', key: 'status' },
-  { title: '摘要', key: 'summary' },
-  { title: '创建时间', key: 'created_at' }
-]
+const columns = computed<DataTableColumns<AgentRun>>(() => [
+  { title: t('dashboard.runId'), key: 'id', width: 80 },
+  { title: t('dashboard.intent'), key: 'intent', render: (row) => statusLabel(row.intent) },
+  { title: t('common.status'), key: 'status', render: (row) => statusLabel(row.status) },
+  { title: t('dashboard.summary'), key: 'summary' },
+  { title: t('dashboard.createdAt'), key: 'created_at' }
+])
 
 async function loadDashboard() {
   const [summaryData, intents, tickets, runData] = await Promise.all([
@@ -83,14 +87,14 @@ async function loadDashboard() {
   runs.value = runData
   await nextTick()
   renderCharts()
-  message.success('Dashboard 已刷新')
+  message.success(t('dashboard.refreshed'))
 }
 
 function renderCharts() {
   if (intentChartRef.value) {
     echarts.init(intentChartRef.value).setOption({
       tooltip: {},
-      xAxis: { type: 'category', data: intentStats.value.map((item) => item.name) },
+      xAxis: { type: 'category', data: intentStats.value.map((item) => statusLabel(item.name)) },
       yAxis: { type: 'value' },
       series: [{ type: 'bar', data: intentStats.value.map((item) => item.value), itemStyle: { color: '#18a058' } }]
     })
@@ -102,12 +106,17 @@ function renderCharts() {
         {
           type: 'pie',
           radius: '70%',
-          data: ticketStats.value.map((item) => ({ name: item.name, value: item.value }))
+          data: ticketStats.value.map((item) => ({ name: statusLabel(item.name), value: item.value }))
         }
       ]
     })
   }
 }
+
+watch(locale, async () => {
+  await nextTick()
+  renderCharts()
+})
 
 onMounted(loadDashboard)
 </script>
@@ -117,4 +126,3 @@ onMounted(loadDashboard)
   height: 280px;
 }
 </style>
-

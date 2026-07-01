@@ -1,4 +1,4 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { createDiscreteApi } from 'naive-ui'
 
 import { clearSession, type CurrentUser, authToken, setToken } from '@/auth/session'
@@ -27,7 +27,7 @@ apiClient.interceptors.response.use(
       }
     }
     const detail = error.response?.data?.detail
-    const fallback = error.message || '请求失败，请稍后重试'
+    const fallback = error.message || 'Request failed. Please try again later.'
     message.error(typeof detail === 'string' ? detail : fallback)
     return Promise.reject(error)
   }
@@ -70,15 +70,35 @@ export type OrderPayload = Omit<Order, 'id' | 'product'>
 export interface SessionItem {
   id: number
   user_id: number
+  customer_id: number | null
+  visitor_id: string | null
   title: string
+  channel: string
+  conversation_type: string
+  intent: string | null
   status: string
+  priority: string
+  requires_human: boolean
+  bound_order_id: number | null
+  bound_product_id: number | null
+  summary: string | null
   last_message_at: string | null
 }
 
 export interface SessionPayload {
   user_id: number
+  customer_id?: number | null
+  visitor_id?: string | null
   title: string
+  channel?: string
+  conversation_type?: string
+  intent?: string | null
   status?: string
+  priority?: string
+  requires_human?: boolean
+  bound_order_id?: number | null
+  bound_product_id?: number | null
+  summary?: string | null
   initial_message?: string
 }
 
@@ -89,6 +109,7 @@ export interface MessageItem {
   sender_type: string
   content: string
   message_type: string
+  language: string
   metadata_json: string | null
   created_at: string
 }
@@ -198,6 +219,25 @@ export interface AgentRunResult {
   reply_suggestion: ReplySuggestion | null
   review_task: ReviewTask | null
   ticket: Ticket | null
+  failed_node?: string | null
+  partial_context?: Record<string, any> | null
+}
+
+export interface CustomerMessagePayload {
+  session_id?: number | null
+  customer_id?: number | null
+  visitor_id?: string | null
+  content: string
+  channel?: string
+  order_no?: string | null
+  conversation_type?: string | null
+  run_agent?: boolean
+}
+
+export interface CustomerMessageResponse {
+  session: SessionItem
+  message: MessageItem
+  agent_result: AgentRunResult | null
 }
 
 export interface StatItem {
@@ -235,6 +275,8 @@ export const api = {
   deleteOrder: (id: number) => apiClient.delete<Order>(`/orders/${id}`).then((res) => res.data),
   getSessions: () => apiClient.get<SessionItem[]>('/sessions').then((res) => res.data),
   createSession: (payload: SessionPayload) => apiClient.post<SessionItem>('/sessions', payload).then((res) => res.data),
+  sendCustomerMessage: (payload: CustomerMessagePayload) =>
+    apiClient.post<CustomerMessageResponse>('/sessions/customer-message', payload).then((res) => res.data),
   getMessages: (sessionId: number) =>
     apiClient.get<MessageItem[]>(`/sessions/${sessionId}/messages`).then((res) => res.data),
   sendMessage: (sessionId: number, content: string, senderId = 1) =>

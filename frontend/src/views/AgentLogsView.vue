@@ -2,21 +2,21 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Agent Logs</h1>
-        <p class="page-subtitle">Inspect Agent runs, node timing, errors, fallback markers, and sources.</p>
+        <h1 class="page-title">{{ t('agentLogs.title') }}</h1>
+        <p class="page-subtitle">{{ t('agentLogs.subtitle') }}</p>
       </div>
-      <n-button secondary @click="loadRuns">Refresh</n-button>
+      <n-button secondary @click="loadRuns">{{ t('common.refresh') }}</n-button>
     </div>
 
     <n-grid :cols="2" :x-gap="16" responsive="screen">
       <n-grid-item>
-        <n-card title="Runs" size="small">
+        <n-card :title="t('agentLogs.runs')" size="small">
           <n-data-table :columns="columns" :data="runs" :pagination="{ pageSize: 8 }" />
         </n-card>
       </n-grid-item>
       <n-grid-item>
-        <n-card title="Node Logs" size="small">
-          <n-empty v-if="!logs.length" description="Select a run" />
+        <n-card :title="t('agentLogs.nodeLogs')" size="small">
+          <n-empty v-if="!logs.length" :description="t('agentLogs.selectRun')" />
           <n-timeline v-else>
             <n-timeline-item
               v-for="log in logs"
@@ -27,17 +27,17 @@
             >
               <n-space vertical>
                 <n-space>
-                  <n-tag size="small" :type="tagType(log.status)">{{ log.status }}</n-tag>
-                  <n-tag v-if="hasFallback(log)" size="small" type="warning">fallback</n-tag>
-                  <n-tag v-if="hasSources(log)" size="small" type="info">sources</n-tag>
-                  <n-tag v-if="isHighRisk(log)" size="small" type="error">high risk</n-tag>
+                  <n-tag size="small" :type="tagType(log.status)">{{ statusLabel(log.status) }}</n-tag>
+                  <n-tag v-if="hasFallback(log)" size="small" type="warning">{{ t('agentLogs.fallback') }}</n-tag>
+                  <n-tag v-if="hasSources(log)" size="small" type="info">{{ t('agentLogs.sources') }}</n-tag>
+                  <n-tag v-if="isHighRisk(log)" size="small" type="error">{{ t('agentLogs.highRisk') }}</n-tag>
                 </n-space>
                 <n-alert v-if="log.error_message" type="error">{{ log.error_message }}</n-alert>
                 <n-collapse>
-                  <n-collapse-item title="Input JSON">
+                  <n-collapse-item :title="t('agentLogs.inputJson')">
                     <pre>{{ formatJson(log.input_json) }}</pre>
                   </n-collapse-item>
-                  <n-collapse-item title="Output JSON">
+                  <n-collapse-item :title="t('agentLogs.outputJson')">
                     <pre>{{ formatJson(log.output_json) }}</pre>
                   </n-collapse-item>
                 </n-collapse>
@@ -51,22 +51,26 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NEmpty, NGrid, NGridItem, NSpace, NTag, NTimeline, NTimelineItem } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api, type AgentNodeLog, type AgentRun } from '@/api/client'
+import { useDisplayText } from '@/i18n/display'
 
+const { t } = useI18n()
+const { statusLabel } = useDisplayText()
 const runs = ref<AgentRun[]>([])
 const logs = ref<AgentNodeLog[]>([])
 
-const columns: DataTableColumns<AgentRun> = [
-  { title: 'Run', key: 'id', width: 70 },
-  { title: 'Intent', key: 'intent' },
-  { title: 'Status', key: 'status' },
-  { title: 'Summary', key: 'summary' },
-  { title: 'Actions', key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => loadLogs(row.id) }, { default: () => 'Logs' }) }
-]
+const columns = computed<DataTableColumns<AgentRun>>(() => [
+  { title: t('agentLogs.run'), key: 'id', width: 70 },
+  { title: t('agentLogs.intent'), key: 'intent', render: (row) => statusLabel(row.intent) },
+  { title: t('common.status'), key: 'status', render: (row) => statusLabel(row.status) },
+  { title: t('agentLogs.summary'), key: 'summary' },
+  { title: t('common.actions'), key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => loadLogs(row.id) }, { default: () => t('agentLogs.logs') }) }
+])
 
 async function loadRuns() {
   runs.value = await api.getAgentRuns()

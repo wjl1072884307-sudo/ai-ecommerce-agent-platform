@@ -19,7 +19,8 @@ from app.models import (
     Ticket,
 )
 
-RETURN_INTENTS = {"return_request", "refund_request", "complaint"}
+RETURN_INTENTS = {"return_request", "refund_request", "exchange_request", "complaint"}
+AFTER_SALES_INTENTS = {"return_request", "refund_request", "exchange_request"}
 
 
 def receive_message(db: Session, context: AgentContext) -> NodeResult:
@@ -38,7 +39,13 @@ def receive_message(db: Session, context: AgentContext) -> NodeResult:
     recent_messages.reverse()
 
     context.user_id = session.user_id
+    context.customer_id = session.customer_id
+    context.visitor_id = session.visitor_id
+    context.bound_order_id = session.bound_order_id
+    context.bound_product_id = session.bound_product_id
     context.message_content = message.content
+    context.language = detect_language(message.content)
+    message.language = context.language
     context.recent_messages = [
         {
             "id": item.id,
@@ -52,6 +59,11 @@ def receive_message(db: Session, context: AgentContext) -> NodeResult:
         status="success",
         output={
             "user_id": context.user_id,
+            "customer_id": context.customer_id,
+            "visitor_id": context.visitor_id,
+            "bound_order_id": context.bound_order_id,
+            "bound_product_id": context.bound_product_id,
+            "language": context.language,
             "message_content": context.message_content,
             "recent_messages": context.recent_messages,
         },
@@ -63,25 +75,72 @@ def classify_intent(db: Session, context: AgentContext) -> NodeResult:
     intent, confidence = classify_intent_text(content)
     context.intent = intent
     context.confidence = confidence
+    context.conversation_type = classify_conversation_type(intent, content)
     context.extracted_entities = {"keywords": extract_known_terms(content)}
     return NodeResult(
         status="success",
         output={
             "intent": intent,
             "confidence": confidence,
+            "language": context.language,
+            "conversation_type": context.conversation_type,
             "extracted_entities": context.extracted_entities,
         },
     )
 
 
+def detect_language(content: str) -> str:
+    cjk_count = sum(1 for char in content if "\u4e00" <= char <= "\u9fff")
+    alpha_count = sum(1 for char in content if char.isascii() and char.isalpha())
+    if cjk_count > 0 and cjk_count >= alpha_count / 2:
+        return "zh"
+    if alpha_count > 0:
+        return "en"
+    return "unknown"
+
+
+def classify_conversation_type(intent: str, content: str) -> str:
+    normalized = content.lower()
+    if intent in {"logistics_query"}:
+        return "logistics"
+    if intent == "complaint":
+        return "complaint"
+    if intent == "invoice_request":
+        return "invoice"
+    if intent in AFTER_SALES_INTENTS:
+        return "after_sales"
+    if intent == "product_inquiry" or any(term in normalized for term in ["stock", "price", "spec", "recommend"]):
+        return "pre_sales"
+    if any(term in content for term in ["库存", "价格", "多少钱", "有货", "参数", "推荐"]):
+        return "pre_sales"
+    return "other"
+
+
 def classify_intent_text(content: str) -> tuple[str, float]:
+    normalized = content.lower()
+    english_rules: list[tuple[str, list[str], float]] = [
+        ("complaint", ["complaint", "angry", "bad review", "terrible", "unacceptable"], 0.9),
+        ("invoice_request", ["invoice", "receipt", "tax"], 0.86),
+        ("refund_request", ["refund", "money back", "chargeback"], 0.9),
+        ("exchange_request", ["replace", "replacement", "exchange"], 0.88),
+        ("return_request", ["return", "noise", "broken", "defect", "quality issue"], 0.88),
+        ("logistics_query", ["logistics", "shipping", "delivery", "tracking", "where is my order", "delay"], 0.86),
+        ("order_query", ["order", "order number", "purchase record"], 0.82),
+        ("product_inquiry", ["product", "stock", "price", "spec", "model", "warranty", "recommend"], 0.78),
+    ]
+    for intent, keywords, confidence in english_rules:
+        if any(keyword in normalized for keyword in keywords):
+            return intent, confidence
+
     rules: list[tuple[str, list[str], float]] = [
         ("complaint", ["投诉", "差评", "生气", "监管", "12315", "太差", "不满意"], 0.9),
+        ("invoice_request", ["发票", "开票", "抬头", "税号"], 0.86),
         ("refund_request", ["退款", "退钱", "返钱"], 0.9),
-        ("return_request", ["退货", "退掉", "可以退", "七天无理由", "质量问题", "杂音", "坏了"], 0.88),
+        ("exchange_request", ["退换", "换货", "更换"], 0.88),
+        ("return_request", ["退货", "退掉", "可以退", "七天无理由", "质量问题", "音质", "杂音", "坏了"], 0.88),
         ("logistics_query", ["物流", "快递", "到哪", "运到", "配送", "单号"], 0.86),
         ("order_query", ["订单", "下单", "购买记录", "订单号"], 0.82),
-        ("product_inquiry", ["商品", "库存", "价格", "参数", "型号", "保修"], 0.78),
+        ("product_inquiry", ["商品", "库存", "价格", "多少钱", "有货", "参数", "型号", "保修", "推荐"], 0.78),
     ]
     for intent, keywords, confidence in rules:
         if any(keyword in content for keyword in keywords):
@@ -92,6 +151,30 @@ def classify_intent_text(content: str) -> tuple[str, float]:
 def query_order(db: Session, context: AgentContext) -> NodeResult:
     if context.user_id is None:
         return NodeResult(status="failed", error_message="Missing user_id.")
+
+    if context.customer_id is None and context.visitor_id:
+        context.matched_order = None
+        context.matched_product = None
+        return NodeResult(status="success", output={"matched_order": None, "match_reason": "anonymous_visitor"})
+
+    if context.bound_order_id is not None:
+        bound_order = (
+            db.query(Order)
+            .options(joinedload(Order.product))
+            .filter(Order.id == context.bound_order_id, Order.user_id == context.user_id)
+            .first()
+        )
+        if bound_order:
+            context.matched_order = _order_to_dict(bound_order)
+            context.matched_product = _product_to_dict(bound_order.product) if bound_order.product else None
+            return NodeResult(
+                status="success",
+                output={
+                    "matched_order": context.matched_order,
+                    "matched_product": context.matched_product,
+                    "match_reason": "bound_order",
+                },
+            )
 
     orders = (
         db.query(Order)
@@ -164,19 +247,35 @@ def retrieve_knowledge(db: Session, context: AgentContext) -> NodeResult:
 def check_policy(db: Session, context: AgentContext) -> NodeResult:
     order = context.matched_order
     content = context.message_content or ""
+    normalized_content = content.lower()
+    quality_issue_terms = ["noise", "noisy", "broken", "defect", "defective", "cannot connect", "won't connect", "button failure", "water"]
     result: dict[str, Any] = {
         "allow_return": False,
         "allow_refund": False,
         "need_ticket": context.intent in RETURN_INTENTS,
-        "reason": "未匹配到明确售后规则。",
+        "requires_order_info": False,
+        "reason": "No explicit after-sales rule matched." if context.language == "en" else "未匹配到明确售后规则。",
         "days_since_delivered": None,
         "is_quality_issue": any(term in content for term in ["质量问题", "杂音", "坏了", "无法连接", "失灵"]),
         "is_over_after_sale_period": False,
     }
 
+    result["is_quality_issue"] = result["is_quality_issue"] or any(term in normalized_content for term in quality_issue_terms)
+
+    if context.conversation_type == "pre_sales":
+        result["need_ticket"] = False
+        result["reason"] = "Pre-sales inquiry, no after-sales ticket required." if context.language == "en" else "售前咨询，暂不需要创建售后工单。"
+        context.policy_result = result
+        return NodeResult(status="success", output=result)
+
     if not order:
-        result["reason"] = "未找到关联订单，需要人工确认。"
-        result["need_ticket"] = context.intent in RETURN_INTENTS
+        result["requires_order_info"] = context.conversation_type == "after_sales"
+        result["reason"] = (
+            "No matching order was found. Please provide an order number, phone number, or purchase account before after-sales processing."
+            if context.language == "en"
+            else "未找到关联订单，请先提供订单号、手机号或购买账号后再继续售后处理。"
+        )
+        result["need_ticket"] = False
         context.policy_result = result
         return NodeResult(status="success", output=result)
 
@@ -199,7 +298,12 @@ def check_policy(db: Session, context: AgentContext) -> NodeResult:
     elif context.intent == "complaint":
         result.update(reason="投诉类问题需要创建工单并进入人工审核。")
     else:
-        result.update(need_ticket=False, reason="非售后申请，暂不需要创建售后工单。")
+        result.update(
+            need_ticket=False,
+            reason="Non-after-sales request, no after-sales ticket required."
+            if context.language == "en"
+            else "非售后申请，暂不需要创建售后工单。",
+        )
 
     context.policy_result = result
     return NodeResult(status="success", output=result)
@@ -336,6 +440,18 @@ def generate_reply_llm(db: Session, context: AgentContext) -> NodeResult:
             "model": response.model,
             "usage": response.usage,
         }
+        if response.provider == "mock":
+            content = fallback_content
+            fallback_used = True
+            fallback_reason = "mock_provider_uses_template"
+        elif context.language == "zh" and not _contains_cjk(content):
+            content = fallback_content
+            fallback_used = True
+            fallback_reason = "llm_language_mismatch"
+        elif context.language == "en" and _contains_cjk(content):
+            content = fallback_content
+            fallback_used = True
+            fallback_reason = "llm_language_mismatch"
     except Exception as exc:
         fallback_used = True
         fallback_reason = str(exc)
@@ -372,6 +488,21 @@ def generate_reply_llm(db: Session, context: AgentContext) -> NodeResult:
 
 
 def _build_fallback_reply(context: AgentContext) -> str:
+    if context.language == "zh":
+        if context.policy_result.get("requires_order_info"):
+            return "您好，这类售后问题需要先核验订单信息。请提供订单号、手机号或购买账号，我们确认购买记录后再继续处理退换货或退款申请。"
+        if context.conversation_type == "pre_sales":
+            return "您好，已收到您的咨询。您可以继续提供想了解的商品、预算或使用场景，我会根据商品信息为您说明库存、价格、规格和售后政策。"
+        order_no = context.matched_order["order_no"] if context.matched_order else "未匹配到订单"
+        product_name = context.matched_product["name"] if context.matched_product else "相关商品"
+        policy_reason = context.policy_result.get("reason", "我们会进一步核实售后政策。")
+        review_note = "该回复需要人工审核后发送。" if context.risk_result.get("need_review") else "该回复可作为草稿建议。"
+        return f"您好，已为您查询到订单 {order_no}，商品为 {product_name}。{policy_reason}{review_note}"
+
+    if context.policy_result.get("requires_order_info"):
+        return "Hello, this after-sales request requires order verification first. Please provide the order number, phone number, or purchase account so we can continue with the return, exchange, or refund review."
+    if context.conversation_type == "pre_sales":
+        return "Hello, I received your question. Please share the product, budget, or use case you care about, and I can help check stock, price, specifications, and after-sales policy."
     order_no = context.matched_order["order_no"] if context.matched_order else "unmatched order"
     product_name = context.matched_product["name"] if context.matched_product else "related product"
     policy_reason = context.policy_result.get("reason", "We will further verify the after-sales policy.")
@@ -381,6 +512,10 @@ def _build_fallback_reply(context: AgentContext) -> str:
         else " This reply can be sent as a draft suggestion."
     )
     return f"Hello, I found order {order_no} for {product_name}. {policy_reason}{review_note}"
+
+
+def _contains_cjk(content: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in content)
 
 
 def _build_llm_request(context: AgentContext, fallback_content: str) -> LLMRequest:
@@ -393,7 +528,8 @@ def _build_llm_request(context: AgentContext, fallback_content: str) -> LLMReque
                 role="system",
                 content=(
                     "You are an ecommerce after-sales support assistant. "
-                    "Only draft a reply suggestion. Do not approve refunds, compensation, or ticket closure."
+                    "Only draft a reply suggestion. Do not approve refunds, compensation, or ticket closure. "
+                    f"Reply in {'Chinese' if context.language == 'zh' else 'English'} based on the latest customer message."
                 ),
             ),
             LLMMessage(

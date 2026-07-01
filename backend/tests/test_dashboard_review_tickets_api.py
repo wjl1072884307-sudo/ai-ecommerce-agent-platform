@@ -70,5 +70,5 @@ def test_dashboard_summary_excludes_soft_deleted_products_and_orders(client: Tes
     summary = client.get("/api/dashboard/summary")
 
     assert summary.status_code == 200
-    assert summary.json()["product_count"] == 3
-    assert summary.json()["order_count"] == 3
+    assert summary.json()["product_count"] == 7
+    assert summary.json()["order_count"] == 7

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -47,6 +47,19 @@ class Product(TimestampMixin, Base):
     orders: Mapped[list["Order"]] = relationship(back_populates="product")
 
 
+class Customer(TimestampMixin, Base):
+    __tablename__ = "customers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    external_customer_id: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+
+    sessions: Mapped[list["CustomerSession"]] = relationship(back_populates="customer")
+
+
 class Order(TimestampMixin, Base):
     __tablename__ = "orders"
 
@@ -75,11 +88,24 @@ class CustomerSession(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    visitor_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
+    channel: Mapped[str] = mapped_column(String(40), default="admin_demo", index=True)
+    conversation_type: Mapped[str] = mapped_column(String(40), default="after_sales", index=True)
+    intent: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    priority: Mapped[str] = mapped_column(String(20), default="medium", index=True)
+    requires_human: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    bound_order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
+    bound_product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True, index=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="sessions")
+    customer: Mapped[Customer | None] = relationship(back_populates="sessions")
+    bound_order: Mapped[Order | None] = relationship()
+    bound_product: Mapped[Product | None] = relationship()
     messages: Mapped[list["Message"]] = relationship(back_populates="session")
 
 
@@ -93,6 +119,7 @@ class Message(Base):
     sender_type: Mapped[str] = mapped_column(String(20), index=True)
     content: Mapped[str] = mapped_column(Text)
     message_type: Mapped[str] = mapped_column(String(30), default="text", index=True)
+    language: Mapped[str] = mapped_column(String(10), default="unknown", index=True)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

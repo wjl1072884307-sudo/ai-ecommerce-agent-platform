@@ -53,5 +53,6 @@ def test_agent_generate_reply_records_mock_provider_usage(db_session: Session):
 
     assert output["llm_used"] is True
     assert output["llm_provider"] == "mock"
-    assert output["fallback_used"] is False
+    assert output["fallback_used"] is True
+    assert output["fallback_reason"] == "mock_provider_uses_template"
     assert result["reply_suggestion"].content

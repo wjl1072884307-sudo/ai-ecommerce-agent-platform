@@ -15,12 +15,24 @@ def test_agent_run_completes_return_request_and_creates_business_records(client:
     data = response.json()
     assert data["run"]["status"] == "success"
     assert data["run"]["intent"] == "return_request"
-    assert "MOCK202606120001" in data["reply_suggestion"]["content"]
     assert data["reply_suggestion"]["status"] == "pending_review"
     assert data["review_task"]["status"] == "pending"
     assert data["review_task"]["risk_level"] == "medium"
     assert data["ticket"]["ticket_type"] == "return"
     assert data["ticket"]["order_id"] == 1
+
+
+def test_agent_run_appends_reply_to_session_messages(client: TestClient) -> None:
+    response = client.post("/api/agent/runs", json={"session_id": 1, "message_id": 1})
+    reply_content = response.json()["reply_suggestion"]["content"]
+
+    messages = client.get("/api/sessions/1/messages")
+
+    assert messages.status_code == 200
+    agent_messages = [item for item in messages.json() if item["sender_type"] == "agent"]
+    assert len(agent_messages) == 1
+    assert agent_messages[0]["content"] == reply_content
+    assert agent_messages[0]["message_type"] == "agent_reply"
 
 
 def test_agent_logs_are_queryable(client: TestClient) -> None:
@@ -101,3 +113,79 @@ def test_agent_pipeline_uses_existing_user_before_initial_commit() -> None:
         result = run_agent(db, session_id=1, message_id=1)
 
         assert result["run"].user_id != 0
+
+
+def test_customer_message_reply_follows_chinese_input_language(client: TestClient) -> None:
+    response = client.post(
+        "/api/sessions/customer-message",
+        json={
+            "customer_id": 1,
+            "order_no": "MOCK202606120001",
+            "content": "我的耳机开箱的时候音质就有问题，需要退换",
+            "channel": "web",
+            "run_agent": True,
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    content = data["agent_result"]["reply_suggestion"]["content"]
+    assert data["agent_result"]["partial_context"]["language"] == "zh"
+    assert data["agent_result"]["partial_context"]["conversation_type"] == "after_sales"
+    assert "您好" in content
+    assert "Dear customer" not in content
+
+
+def test_customer_message_reply_follows_english_input_language(client: TestClient) -> None:
+    response = client.post(
+        "/api/sessions/customer-message",
+        json={
+            "customer_id": 1,
+            "order_no": "MOCK202606120001",
+            "content": "The headset has noise. Can I return it?",
+            "channel": "web",
+            "run_agent": True,
+        },
+    )
+
+    assert response.status_code == 201
+    content = response.json()["agent_result"]["reply_suggestion"]["content"]
+    assert response.json()["agent_result"]["partial_context"]["language"] == "en"
+    assert "Hello" in content
+    assert "您好" not in content
+
+
+def test_pre_sales_question_does_not_create_after_sales_ticket(client: TestClient) -> None:
+    response = client.post(
+        "/api/sessions/customer-message",
+        json={
+            "visitor_id": "visitor-presales-001",
+            "content": "这款耳机还有库存吗？多少钱？",
+            "channel": "web",
+            "run_agent": True,
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["session"]["conversation_type"] == "pre_sales"
+    assert data["agent_result"]["partial_context"]["conversation_type"] == "pre_sales"
+    assert data["agent_result"]["ticket"] is None
+
+
+def test_anonymous_after_sales_guides_for_order_information(client: TestClient) -> None:
+    response = client.post(
+        "/api/sessions/customer-message",
+        json={
+            "visitor_id": "visitor-after-sales-001",
+            "content": "我的耳机坏了，想退货",
+            "channel": "web",
+            "run_agent": True,
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["session"]["customer_id"] is None
+    assert data["agent_result"]["partial_context"]["policy_result"]["requires_order_info"] is True
+    assert "订单" in data["agent_result"]["reply_suggestion"]["content"]

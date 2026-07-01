@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models import (
+    Customer,
     CustomerSession,
     KnowledgeChunk,
     KnowledgeDocument,
@@ -76,32 +77,41 @@ def seed_demo_data(db: Session) -> None:
     db.add_all([customer, admin, agent, reviewer, viewer])
     db.flush()
 
+    demo_customer = Customer(
+        external_customer_id="CUST-1001",
+        name="User 1",
+        phone="13800000001",
+        email="customer@example.com",
+    )
+    db.add(demo_customer)
+    db.flush()
+
     headphones = Product(
-        name="星云降噪耳机",
+        name="Nebula Noise-Cancelling Headset",
         sku="AUDIO-NEBULA-001",
-        category="数码音频",
-        description="主动降噪蓝牙耳机，支持通透模式和低延迟游戏模式。",
+        category="Digital Audio",
+        description="Bluetooth headset with active noise cancellation, transparency mode, and low-latency gaming mode.",
         price=399.0,
         stock=120,
-        after_sale_policy="支持 7 天无理由退货；质量问题 15 天内可申请退货或换货。",
+        after_sale_policy="Supports 7-day return and 15-day exchange for verified quality issues.",
     )
     phone = Product(
-        name="极光 Pro 手机",
+        name="Aurora Pro Smartphone",
         sku="PHONE-AURORA-PRO",
-        category="手机数码",
-        description="高性能智能手机，支持快充和高清影像。",
+        category="Smartphone",
+        description="High-performance smartphone with fast charging and high-resolution imaging.",
         price=3299.0,
         stock=35,
-        after_sale_policy="激活后非质量问题不支持 7 天无理由退货；质量问题按三包政策处理。",
+        after_sale_policy="Activated phones do not support no-reason returns; quality issues follow warranty policy.",
     )
     keyboard = Product(
-        name="青轴机械键盘",
+        name="Blue Switch Mechanical Keyboard",
         sku="KEYBOARD-BLUE-001",
-        category="电脑外设",
-        description="有线机械键盘，青轴手感，支持背光。",
+        category="Computer Peripheral",
+        description="Wired mechanical keyboard with blue switches and backlight support.",
         price=259.0,
         stock=80,
-        after_sale_policy="支持 7 天无理由退货，影响二次销售除外。",
+        after_sale_policy="Supports 7-day return if the product remains resellable.",
     )
     monitor = Product(
         name="Aurora 27-inch Monitor",
@@ -247,10 +257,17 @@ def seed_demo_data(db: Session) -> None:
             ),
         ]
     )
+    db.flush()
 
     session = CustomerSession(
         user_id=customer.id,
-        title="耳机售后咨询",
+        customer_id=demo_customer.id,
+        title="Headset after-sales consultation",
+        channel="web",
+        conversation_type="after_sales",
+        bound_order_id=1,
+        bound_product_id=headphones.id,
+        summary="Headset noise return consultation.",
         status="open",
         last_message_at=now,
     )
@@ -261,7 +278,7 @@ def seed_demo_data(db: Session) -> None:
             session_id=session.id,
             sender_id=customer.id,
             sender_type="customer",
-            content="我买的耳机有杂音，可以退货吗？",
+            content="The headset I bought has noise. Can I return it?",
             message_type="text",
         )
     )
@@ -271,31 +288,44 @@ def seed_demo_data(db: Session) -> None:
             "Monitor logistics delay",
             "My monitor has shipped but tracking has not updated. Can you check it?",
             "open",
+            "logistics",
+            monitor.id,
             1,
         ),
         (
             "Smartwatch battery complaint",
             "The smartwatch battery drains too fast and I want after-sales support.",
             "open",
+            "after_sales",
+            smartwatch.id,
             2,
         ),
         (
             "Charger invoice request",
             "I bought two chargers and need help with invoice and delivery timing.",
             "open",
+            "invoice",
+            charger.id,
             3,
         ),
         (
             "Speaker refund follow-up",
             "The speaker refund is marked complete, but I have not received the money.",
             "closed",
+            "after_sales",
+            speaker.id,
             4,
         ),
     ]
-    for title, content, session_status, offset in extra_session_specs:
+    for title, content, session_status, conversation_type, product_id, offset in extra_session_specs:
         extra_session = CustomerSession(
             user_id=customer.id,
+            customer_id=demo_customer.id,
             title=title,
+            channel="web",
+            conversation_type=conversation_type,
+            bound_product_id=product_id,
+            summary=content,
             status=session_status,
             last_message_at=now - timedelta(minutes=offset * 8),
         )

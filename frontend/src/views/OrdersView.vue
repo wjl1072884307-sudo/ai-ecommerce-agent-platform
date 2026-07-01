@@ -2,12 +2,12 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">订单管理</h1>
-        <p class="page-subtitle">维护订单、物流状态和售后状态。</p>
+        <h1 class="page-title">{{ t('orders.title') }}</h1>
+        <p class="page-subtitle">{{ t('orders.subtitle') }}</p>
       </div>
       <div class="toolbar">
-        <n-button secondary @click="loadOrders">刷新</n-button>
-        <n-button type="primary" @click="openCreate">新增订单</n-button>
+        <n-button secondary @click="loadOrders">{{ t('common.refresh') }}</n-button>
+        <n-button type="primary" @click="openCreate">{{ t('orders.newOrder') }}</n-button>
       </div>
     </div>
 
@@ -16,67 +16,67 @@
     </n-card>
 
     <n-drawer v-model:show="showDetailDrawer" :width="480">
-      <n-drawer-content title="订单详情">
+      <n-drawer-content :title="t('orders.orderDetail')">
         <n-descriptions v-if="selected" bordered :column="1" size="small">
-          <n-descriptions-item label="订单号">{{ selected.order_no }}</n-descriptions-item>
-          <n-descriptions-item label="用户 ID">{{ selected.user_id }}</n-descriptions-item>
-          <n-descriptions-item label="商品">{{ selected.product?.name }}</n-descriptions-item>
-          <n-descriptions-item label="数量">{{ selected.quantity }}</n-descriptions-item>
-          <n-descriptions-item label="金额">{{ selected.total_amount }}</n-descriptions-item>
-          <n-descriptions-item label="订单状态">{{ selected.order_status }}</n-descriptions-item>
-          <n-descriptions-item label="支付状态">{{ selected.payment_status }}</n-descriptions-item>
-          <n-descriptions-item label="物流状态">{{ selected.logistics_status }}</n-descriptions-item>
-          <n-descriptions-item label="物流单号">{{ selected.tracking_no }}</n-descriptions-item>
-          <n-descriptions-item label="签收时间">{{ selected.delivered_at || '-' }}</n-descriptions-item>
-          <n-descriptions-item label="售后状态">{{ selected.after_sale_status }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.orderNo')">{{ selected.order_no }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.userId')">{{ selected.user_id }}</n-descriptions-item>
+          <n-descriptions-item :label="t('products.product')">{{ selected.product ? productName(selected.product) : selected.product_id }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.quantity')">{{ selected.quantity }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.amount')">{{ selected.total_amount }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.orderStatus')">{{ statusLabel(selected.order_status) }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.paymentStatus')">{{ statusLabel(selected.payment_status) }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.logisticsStatus')">{{ statusLabel(selected.logistics_status) }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.trackingNo')">{{ selected.tracking_no || '-' }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.deliveredAt')">{{ selected.delivered_at || '-' }}</n-descriptions-item>
+          <n-descriptions-item :label="t('orders.afterSaleStatus')">{{ statusLabel(selected.after_sale_status) }}</n-descriptions-item>
         </n-descriptions>
       </n-drawer-content>
     </n-drawer>
 
     <n-drawer v-model:show="showFormDrawer" :width="560">
-      <n-drawer-content :title="editingId ? '编辑订单' : '新增订单'">
+      <n-drawer-content :title="editingId ? t('orders.editOrder') : t('orders.newOrder')">
         <n-form label-placement="top">
-          <n-form-item label="订单号">
+          <n-form-item :label="t('orders.orderNo')">
             <n-input v-model:value="form.order_no" />
           </n-form-item>
           <n-grid :cols="2" :x-gap="12">
-            <n-form-item-gi label="用户 ID">
+            <n-form-item-gi :label="t('orders.userId')">
               <n-input-number v-model:value="form.user_id" :min="1" />
             </n-form-item-gi>
-            <n-form-item-gi label="商品 ID">
+            <n-form-item-gi :label="t('orders.productId')">
               <n-input-number v-model:value="form.product_id" :min="1" />
             </n-form-item-gi>
           </n-grid>
           <n-grid :cols="2" :x-gap="12">
-            <n-form-item-gi label="数量">
+            <n-form-item-gi :label="t('orders.quantity')">
               <n-input-number v-model:value="form.quantity" :min="1" />
             </n-form-item-gi>
-            <n-form-item-gi label="金额">
+            <n-form-item-gi :label="t('orders.amount')">
               <n-input-number v-model:value="form.total_amount" :min="0" />
             </n-form-item-gi>
           </n-grid>
           <n-grid :cols="2" :x-gap="12">
-            <n-form-item-gi label="订单状态">
+            <n-form-item-gi :label="t('orders.orderStatus')">
               <n-select v-model:value="form.order_status" :options="orderStatusOptions" />
             </n-form-item-gi>
-            <n-form-item-gi label="支付状态">
+            <n-form-item-gi :label="t('orders.paymentStatus')">
               <n-select v-model:value="form.payment_status" :options="paymentStatusOptions" />
             </n-form-item-gi>
           </n-grid>
           <n-grid :cols="2" :x-gap="12">
-            <n-form-item-gi label="物流状态">
+            <n-form-item-gi :label="t('orders.logisticsStatus')">
               <n-select v-model:value="form.logistics_status" :options="logisticsStatusOptions" />
             </n-form-item-gi>
-            <n-form-item-gi label="售后状态">
+            <n-form-item-gi :label="t('orders.afterSaleStatus')">
               <n-select v-model:value="form.after_sale_status" :options="afterSaleStatusOptions" />
             </n-form-item-gi>
           </n-grid>
-          <n-form-item label="物流单号">
+          <n-form-item :label="t('orders.trackingNo')">
             <n-input v-model:value="form.tracking_no" />
           </n-form-item>
           <n-space>
-            <n-button type="primary" @click="saveOrder">保存</n-button>
-            <n-button @click="showFormDrawer = false">取消</n-button>
+            <n-button type="primary" @click="saveOrder">{{ t('common.save') }}</n-button>
+            <n-button @click="showFormDrawer = false">{{ t('common.cancel') }}</n-button>
           </n-space>
         </n-form>
       </n-drawer-content>
@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import {
   NButton,
@@ -107,10 +107,14 @@ import {
   NTag,
   useMessage
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api, type Order, type OrderPayload } from '@/api/client'
+import { useDisplayText } from '@/i18n/display'
 
 const message = useMessage()
+const { t } = useI18n()
+const { productName, statusLabel } = useDisplayText()
 const orders = ref<Order[]>([])
 const selected = ref<Order | null>(null)
 const showDetailDrawer = ref(false)
@@ -133,43 +137,47 @@ const form = reactive<OrderPayload>({
   after_sale_status: 'none'
 })
 
-const orderStatusOptions = ['pending', 'paid', 'shipped', 'delivered', 'closed'].map(toOption)
-const paymentStatusOptions = ['unpaid', 'paid', 'refunded'].map(toOption)
-const logisticsStatusOptions = ['pending', 'shipped', 'delivered'].map(toOption)
-const afterSaleStatusOptions = ['none', 'applying', 'processing', 'done', 'rejected'].map(toOption)
+const orderStatusOptions = computed(() => ['pending', 'paid', 'shipped', 'delivered', 'closed'].map(toOption))
+const paymentStatusOptions = computed(() => ['unpaid', 'paid', 'refunded'].map(toOption))
+const logisticsStatusOptions = computed(() => ['pending', 'shipped', 'delivered'].map(toOption))
+const afterSaleStatusOptions = computed(() => ['none', 'applying', 'processing', 'done', 'rejected'].map(toOption))
 
-const columns: DataTableColumns<Order> = [
-  { title: '订单号', key: 'order_no' },
-  { title: '用户', key: 'user_id', width: 80 },
-  { title: '商品', key: 'product_id', width: 80 },
-  { title: '金额', key: 'total_amount' },
-  { title: '订单状态', key: 'order_status' },
-  { title: '物流', key: 'logistics_status', render: (row) => h(NTag, { size: 'small' }, { default: () => row.logistics_status }) },
-  { title: '售后', key: 'after_sale_status' },
+const columns = computed<DataTableColumns<Order>>(() => [
+  { title: t('orders.orderNo'), key: 'order_no' },
+  { title: t('common.user'), key: 'user_id', width: 80 },
+  { title: t('products.product'), key: 'product_id', render: (row) => (row.product ? productName(row.product) : row.product_id) },
+  { title: t('orders.amount'), key: 'total_amount' },
+  { title: t('orders.orderStatus'), key: 'order_status', render: (row) => statusLabel(row.order_status) },
   {
-    title: '操作',
+    title: t('orders.logistics'),
+    key: 'logistics_status',
+    render: (row) => h(NTag, { size: 'small' }, { default: () => statusLabel(row.logistics_status) })
+  },
+  { title: t('orders.afterSales'), key: 'after_sale_status', render: (row) => statusLabel(row.after_sale_status) },
+  {
+    title: t('common.actions'),
     key: 'actions',
     width: 210,
     render: (row) =>
       h(NSpace, { size: 8 }, {
         default: () => [
-          h(NButton, { size: 'small', onClick: () => openDetail(row.id) }, { default: () => '详情' }),
-          h(NButton, { size: 'small', type: 'primary', secondary: true, onClick: () => openEdit(row) }, { default: () => '编辑' }),
+          h(NButton, { size: 'small', onClick: () => openDetail(row.id) }, { default: () => t('common.detail') }),
+          h(NButton, { size: 'small', type: 'primary', secondary: true, onClick: () => openEdit(row) }, { default: () => t('common.edit') }),
           h(
             NPopconfirm,
             { onPositiveClick: () => removeOrder(row.id) },
             {
-              trigger: () => h(NButton, { size: 'small', type: 'error', secondary: true }, { default: () => '删除' }),
-              default: () => '确认删除该订单？'
+              trigger: () => h(NButton, { size: 'small', type: 'error', secondary: true }, { default: () => t('common.delete') }),
+              default: () => t('orders.deleteConfirm')
             }
           )
         ]
       })
   }
-]
+])
 
 function toOption(value: string) {
-  return { label: value, value }
+  return { label: statusLabel(value), value }
 }
 
 async function loadOrders() {
@@ -224,10 +232,10 @@ function openEdit(row: Order) {
 async function saveOrder() {
   if (editingId.value) {
     await api.updateOrder(editingId.value, form)
-    message.success('订单已更新')
+    message.success(t('orders.updated'))
   } else {
     await api.createOrder(form)
-    message.success('订单已新增')
+    message.success(t('orders.created'))
   }
   showFormDrawer.value = false
   await loadOrders()
@@ -235,10 +243,9 @@ async function saveOrder() {
 
 async function removeOrder(id: number) {
   await api.deleteOrder(id)
-  message.success('订单已删除')
+  message.success(t('orders.deleted'))
   await loadOrders()
 }
 
 onMounted(loadOrders)
 </script>
-

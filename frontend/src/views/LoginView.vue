@@ -2,18 +2,18 @@
   <main class="login-page">
     <section class="login-panel">
       <div>
-        <h1>AI Ecommerce Agent</h1>
-        <p>Sign in to the operations console.</p>
+        <h1>{{ t('brand.name') }}</h1>
+        <p>{{ t('login.subtitle') }}</p>
       </div>
 
       <n-form @submit.prevent="submit">
-        <n-form-item label="Username">
+        <n-form-item :label="t('login.username')">
           <n-input v-model:value="username" autocomplete="username" />
         </n-form-item>
-        <n-form-item label="Password">
+        <n-form-item :label="t('login.password')">
           <n-input v-model:value="password" type="password" autocomplete="current-password" />
         </n-form-item>
-        <n-button type="primary" block attr-type="submit" :loading="loading">Sign in</n-button>
+        <n-button type="primary" block attr-type="submit" :loading="loading">{{ t('login.submit') }}</n-button>
       </n-form>
     </section>
   </main>
@@ -23,12 +23,14 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NForm, NFormItem, NInput, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/client'
 import { setCurrentUser } from '@/auth/session'
 
 const router = useRouter()
 const message = useMessage()
+const { t } = useI18n()
 const username = ref('admin_demo')
 const password = ref('admin123456')
 const loading = ref(false)
@@ -38,7 +40,7 @@ async function submit() {
   try {
     await api.login(username.value, password.value)
     setCurrentUser(await api.getCurrentUser())
-    message.success('Signed in')
+    message.success(t('login.signedIn'))
     await router.replace('/dashboard')
   } finally {
     loading.value = false

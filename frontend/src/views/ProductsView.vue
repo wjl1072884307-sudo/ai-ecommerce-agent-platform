@@ -2,13 +2,13 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">商品管理</h1>
-        <p class="page-subtitle">维护商品、SKU、库存和售后标签。</p>
+        <h1 class="page-title">{{ t('products.title') }}</h1>
+        <p class="page-subtitle">{{ t('products.subtitle') }}</p>
       </div>
       <div class="toolbar">
-        <n-input v-model:value="keyword" placeholder="搜索商品" clearable />
-        <n-button secondary @click="loadProducts">搜索</n-button>
-        <n-button type="primary" @click="openCreate">新增商品</n-button>
+        <n-input v-model:value="keyword" :placeholder="t('products.searchPlaceholder')" clearable />
+        <n-button secondary @click="loadProducts">{{ t('common.search') }}</n-button>
+        <n-button type="primary" @click="openCreate">{{ t('products.newProduct') }}</n-button>
       </div>
     </div>
 
@@ -17,50 +17,50 @@
     </n-card>
 
     <n-drawer v-model:show="showDetailDrawer" :width="420">
-      <n-drawer-content title="商品详情">
+      <n-drawer-content :title="t('products.productDetail')">
         <n-descriptions v-if="selected" bordered :column="1" size="small">
-          <n-descriptions-item label="名称">{{ selected.name }}</n-descriptions-item>
+          <n-descriptions-item :label="t('products.productName')">{{ productName(selected) }}</n-descriptions-item>
           <n-descriptions-item label="SKU">{{ selected.sku }}</n-descriptions-item>
-          <n-descriptions-item label="类目">{{ selected.category }}</n-descriptions-item>
-          <n-descriptions-item label="价格">{{ selected.price }}</n-descriptions-item>
-          <n-descriptions-item label="库存">{{ selected.stock }}</n-descriptions-item>
-          <n-descriptions-item label="状态">{{ selected.status }}</n-descriptions-item>
-          <n-descriptions-item label="售后">{{ selected.after_sale_policy }}</n-descriptions-item>
-          <n-descriptions-item label="描述">{{ selected.description }}</n-descriptions-item>
+          <n-descriptions-item :label="t('common.category')">{{ productCategory(selected) }}</n-descriptions-item>
+          <n-descriptions-item :label="t('common.price')">{{ selected.price }}</n-descriptions-item>
+          <n-descriptions-item :label="t('common.stock')">{{ selected.stock }}</n-descriptions-item>
+          <n-descriptions-item :label="t('common.status')">{{ statusLabel(selected.status) }}</n-descriptions-item>
+          <n-descriptions-item :label="t('products.afterSalesPolicy')">{{ productPolicy(selected) }}</n-descriptions-item>
+          <n-descriptions-item :label="t('common.description')">{{ productDescription(selected) }}</n-descriptions-item>
         </n-descriptions>
       </n-drawer-content>
     </n-drawer>
 
     <n-drawer v-model:show="showFormDrawer" :width="520">
-      <n-drawer-content :title="editingId ? '编辑商品' : '新增商品'">
+      <n-drawer-content :title="editingId ? t('products.editProduct') : t('products.newProduct')">
         <n-form label-placement="top">
-          <n-form-item label="商品名称">
+          <n-form-item :label="t('products.productName')">
             <n-input v-model:value="form.name" />
           </n-form-item>
           <n-form-item label="SKU">
             <n-input v-model:value="form.sku" />
           </n-form-item>
-          <n-form-item label="类目">
+          <n-form-item :label="t('common.category')">
             <n-input v-model:value="form.category" />
           </n-form-item>
-          <n-form-item label="价格">
+          <n-form-item :label="t('common.price')">
             <n-input-number v-model:value="form.price" :min="0" />
           </n-form-item>
-          <n-form-item label="库存">
+          <n-form-item :label="t('common.stock')">
             <n-input-number v-model:value="form.stock" :min="0" />
           </n-form-item>
-          <n-form-item label="状态">
+          <n-form-item :label="t('common.status')">
             <n-select v-model:value="form.status" :options="statusOptions" />
           </n-form-item>
-          <n-form-item label="售后规则">
+          <n-form-item :label="t('products.afterSalesPolicy')">
             <n-input v-model:value="form.after_sale_policy" type="textarea" />
           </n-form-item>
-          <n-form-item label="描述">
+          <n-form-item :label="t('common.description')">
             <n-input v-model:value="form.description" type="textarea" />
           </n-form-item>
           <n-space>
-            <n-button type="primary" @click="saveProduct">保存</n-button>
-            <n-button @click="showFormDrawer = false">取消</n-button>
+            <n-button type="primary" @click="saveProduct">{{ t('common.save') }}</n-button>
+            <n-button @click="showFormDrawer = false">{{ t('common.cancel') }}</n-button>
           </n-space>
         </n-form>
       </n-drawer-content>
@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import {
   NButton,
@@ -89,10 +89,14 @@ import {
   NTag,
   useMessage
 } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api, type Product, type ProductPayload } from '@/api/client'
+import { useDisplayText } from '@/i18n/display'
 
 const message = useMessage()
+const { t } = useI18n()
+const { productName, productCategory, productDescription, productPolicy, statusLabel } = useDisplayText()
 const keyword = ref('')
 const products = ref<Product[]>([])
 const selected = ref<Product | null>(null)
@@ -111,40 +115,44 @@ const form = reactive<ProductPayload>({
   status: 'active'
 })
 
-const statusOptions = [
-  { label: 'active', value: 'active' },
-  { label: 'inactive', value: 'inactive' }
-]
+const statusOptions = computed(() => [
+  { label: statusLabel('active'), value: 'active' },
+  { label: statusLabel('inactive'), value: 'inactive' }
+])
 
-const columns: DataTableColumns<Product> = [
-  { title: 'ID', key: 'id', width: 70 },
-  { title: '商品', key: 'name' },
+const columns = computed<DataTableColumns<Product>>(() => [
+  { title: t('common.id'), key: 'id', width: 70 },
+  { title: t('products.product'), key: 'name', render: (row) => productName(row) },
   { title: 'SKU', key: 'sku' },
-  { title: '类目', key: 'category' },
-  { title: '价格', key: 'price' },
-  { title: '库存', key: 'stock' },
-  { title: '状态', key: 'status', render: (row) => h(NTag, { type: row.status === 'active' ? 'success' : 'warning', size: 'small' }, { default: () => row.status }) },
+  { title: t('common.category'), key: 'category', render: (row) => productCategory(row) },
+  { title: t('common.price'), key: 'price' },
+  { title: t('common.stock'), key: 'stock' },
   {
-    title: '操作',
+    title: t('common.status'),
+    key: 'status',
+    render: (row) => h(NTag, { type: row.status === 'active' ? 'success' : 'warning', size: 'small' }, { default: () => statusLabel(row.status) })
+  },
+  {
+    title: t('common.actions'),
     key: 'actions',
-    width: 210,
+    width: 220,
     render: (row) =>
       h(NSpace, { size: 8 }, {
         default: () => [
-          h(NButton, { size: 'small', onClick: () => openDetail(row.id) }, { default: () => '详情' }),
-          h(NButton, { size: 'small', type: 'primary', secondary: true, onClick: () => openEdit(row) }, { default: () => '编辑' }),
+          h(NButton, { size: 'small', onClick: () => openDetail(row.id) }, { default: () => t('common.detail') }),
+          h(NButton, { size: 'small', type: 'primary', secondary: true, onClick: () => openEdit(row) }, { default: () => t('common.edit') }),
           h(
             NPopconfirm,
             { onPositiveClick: () => removeProduct(row.id) },
             {
-              trigger: () => h(NButton, { size: 'small', type: 'error', secondary: true }, { default: () => '删除' }),
-              default: () => '确认删除该商品？'
+              trigger: () => h(NButton, { size: 'small', type: 'error', secondary: true }, { default: () => t('common.delete') }),
+              default: () => t('products.deleteConfirm')
             }
           )
         ]
       })
   }
-]
+])
 
 async function loadProducts() {
   products.value = await api.getProducts(keyword.value)
@@ -188,10 +196,10 @@ function openEdit(row: Product) {
 async function saveProduct() {
   if (editingId.value) {
     await api.updateProduct(editingId.value, form)
-    message.success('商品已更新')
+    message.success(t('products.updated'))
   } else {
     await api.createProduct(form)
-    message.success('商品已新增')
+    message.success(t('products.created'))
   }
   showFormDrawer.value = false
   await loadProducts()
@@ -199,10 +207,9 @@ async function saveProduct() {
 
 async function removeProduct(id: number) {
   await api.deleteProduct(id)
-  message.success('商品已删除')
+  message.success(t('products.deleted'))
   await loadProducts()
 }
 
 onMounted(loadProducts)
 </script>
-

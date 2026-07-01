@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -16,7 +17,7 @@ from app.agent.nodes import (
     risk_check,
 )
 from app.agent.types import AgentContext, NodeResult
-from app.models import AgentRun, CustomerSession, ReplySuggestion, ReviewTask, Ticket
+from app.models import AgentRun, CustomerSession, Message, ReplySuggestion, ReviewTask, Ticket
 
 NODE_SEQUENCE = [
     ("receive_message", receive_message),
@@ -65,15 +66,18 @@ def run_agent(db: Session, session_id: int, message_id: int) -> dict[str, Any]:
     else:
         run.status = "success"
         run.summary = _build_summary(context)
+        _sync_session_context(session, context)
     db.commit()
     db.refresh(run)
+
+    reply_suggestion = db.get(ReplySuggestion, context.reply_suggestion_id) if context.reply_suggestion_id else None
+    if not failed_result and reply_suggestion:
+        _append_agent_reply_message(db, session, reply_suggestion)
 
     partial_context = _context_snapshot(context)
     return {
         "run": run,
-        "reply_suggestion": db.get(ReplySuggestion, context.reply_suggestion_id)
-        if context.reply_suggestion_id
-        else None,
+        "reply_suggestion": reply_suggestion,
         "review_task": db.get(ReviewTask, context.review_task_id) if context.review_task_id else None,
         "ticket": db.get(Ticket, context.ticket_id) if context.ticket_id else None,
         "failed_node": failed_node,
@@ -87,6 +91,12 @@ def _context_snapshot(context: AgentContext) -> dict[str, Any]:
         "message_id": context.message_id,
         "run_id": context.run_id,
         "user_id": context.user_id,
+        "customer_id": context.customer_id,
+        "visitor_id": context.visitor_id,
+        "bound_order_id": context.bound_order_id,
+        "bound_product_id": context.bound_product_id,
+        "language": context.language,
+        "conversation_type": context.conversation_type,
         "intent": context.intent,
         "message_content": context.message_content,
         "matched_order": context.matched_order,
@@ -97,6 +107,54 @@ def _context_snapshot(context: AgentContext) -> dict[str, Any]:
         "risk_actions": context.risk_actions,
         "llm_result": context.llm_result,
     }
+
+
+def _append_agent_reply_message(db: Session, session: CustomerSession | None, suggestion: ReplySuggestion) -> None:
+    if not session or not suggestion.content:
+        return
+
+    now = datetime.now()
+    db.add(
+        Message(
+            session_id=session.id,
+            sender_id=None,
+            sender_type="agent",
+            content=suggestion.content,
+            message_type="agent_reply",
+            language=suggestion_language(suggestion),
+            metadata_json=json.dumps(
+                {
+                    "run_id": suggestion.run_id,
+                    "reply_suggestion_id": suggestion.id,
+                    "status": suggestion.status,
+                    "intent": suggestion.intent,
+                },
+                ensure_ascii=False,
+            ),
+            created_at=now,
+        )
+    )
+    session.last_message_at = now
+    db.commit()
+
+
+def _sync_session_context(session: CustomerSession | None, context: AgentContext) -> None:
+    if not session:
+        return
+    session.intent = context.intent
+    session.conversation_type = context.conversation_type
+    session.requires_human = bool(context.risk_result.get("need_review") or context.policy_result.get("requires_order_info"))
+    if context.matched_order:
+        session.bound_order_id = context.matched_order.get("id")
+    if context.matched_product:
+        session.bound_product_id = context.matched_product.get("id")
+    session.summary = _build_summary(context)
+
+
+def suggestion_language(suggestion: ReplySuggestion) -> str:
+    if any("\u4e00" <= char <= "\u9fff" for char in suggestion.content):
+        return "zh"
+    return "en"
 
 
 def _build_summary(context: AgentContext) -> str:

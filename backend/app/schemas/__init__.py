@@ -21,7 +21,7 @@ from app.schemas.knowledge import (
 from app.schemas.order import OrderCreate, OrderDetailRead, OrderRead, OrderUpdate
 from app.schemas.product import ProductCreate, ProductRead, ProductUpdate
 from app.schemas.review import ReviewAction
-from app.schemas.session import MessageCreate, MessageRead, SessionCreate, SessionRead
+from app.schemas.session import CustomerMessageCreate, CustomerMessageResponse, MessageCreate, MessageRead, SessionCreate, SessionRead
 from app.schemas.ticket import TicketStatusUpdate
 from app.schemas.ticket_log import TicketStatusLogRead
 
@@ -40,6 +40,8 @@ __all__ = [
     "KnowledgeDocumentUpdate",
     "KnowledgeSearchResult",
     "LoginRequest",
+    "CustomerMessageCreate",
+    "CustomerMessageResponse",
     "MessageCreate",
     "MessageRead",
     "OrderDetailRead",

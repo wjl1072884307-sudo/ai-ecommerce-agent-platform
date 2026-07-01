@@ -8,7 +8,13 @@ class AgentContext:
     message_id: int
     run_id: int
     user_id: int | None = None
+    customer_id: int | None = None
+    visitor_id: str | None = None
+    bound_order_id: int | None = None
+    bound_product_id: int | None = None
     message_content: str | None = None
+    language: str = "unknown"
+    conversation_type: str = "other"
     recent_messages: list[dict[str, Any]] = field(default_factory=list)
     intent: str | None = None
     confidence: float = 0.0

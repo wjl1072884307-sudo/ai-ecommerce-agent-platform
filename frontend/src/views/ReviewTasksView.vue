@@ -2,10 +2,10 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Review Tasks</h1>
-        <p class="page-subtitle">Handle high-risk Agent replies that require manual approval.</p>
+        <h1 class="page-title">{{ t('reviews.title') }}</h1>
+        <p class="page-subtitle">{{ t('reviews.subtitle') }}</p>
       </div>
-      <n-button secondary @click="loadTasks">Refresh</n-button>
+      <n-button secondary @click="loadTasks">{{ t('common.refresh') }}</n-button>
     </div>
 
     <n-card size="small">
@@ -13,19 +13,19 @@
     </n-card>
 
     <n-drawer v-model:show="showDrawer" :width="480">
-      <n-drawer-content title="Review detail">
+      <n-drawer-content :title="t('reviews.detail')">
         <n-space v-if="selected" vertical>
           <n-descriptions bordered :column="1" size="small">
-            <n-descriptions-item label="Title">{{ selected.title }}</n-descriptions-item>
-            <n-descriptions-item label="Risk">{{ selected.risk_level }}</n-descriptions-item>
-            <n-descriptions-item label="Reason">{{ selected.risk_reason || '-' }}</n-descriptions-item>
-            <n-descriptions-item label="Status">{{ selected.status }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.title')">{{ selected.title }}</n-descriptions-item>
+            <n-descriptions-item :label="t('reviews.risk')">{{ statusLabel(selected.risk_level) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('reviews.reason')">{{ selected.risk_reason || '-' }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.status')">{{ statusLabel(selected.status) }}</n-descriptions-item>
           </n-descriptions>
           <template v-if="canReview">
-            <n-input v-model:value="comment" type="textarea" placeholder="Review comment" />
+            <n-input v-model:value="comment" type="textarea" :placeholder="t('reviews.commentPlaceholder')" />
             <n-space>
-              <n-button type="primary" @click="approve">Approve</n-button>
-              <n-button type="error" secondary @click="reject">Reject</n-button>
+              <n-button type="primary" @click="approve">{{ t('reviews.approve') }}</n-button>
+              <n-button type="error" secondary @click="reject">{{ t('reviews.reject') }}</n-button>
             </n-space>
           </template>
         </n-space>
@@ -38,25 +38,29 @@
 import { computed, h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import { NButton, NCard, NDataTable, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NInput, NSpace, NTag, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api, type ReviewTask } from '@/api/client'
 import { role } from '@/auth/session'
+import { useDisplayText } from '@/i18n/display'
 
 const message = useMessage()
+const { t } = useI18n()
+const { statusLabel } = useDisplayText()
 const tasks = ref<ReviewTask[]>([])
 const selected = ref<ReviewTask | null>(null)
 const showDrawer = ref(false)
 const comment = ref('Approved after manual review.')
 const canReview = computed(() => role.value === 'admin' || role.value === 'reviewer')
 
-const columns: DataTableColumns<ReviewTask> = [
-  { title: 'ID', key: 'id', width: 70 },
-  { title: 'Title', key: 'title' },
-  { title: 'Risk', key: 'risk_level', render: (row) => h(NTag, { type: row.risk_level === 'high' ? 'error' : 'warning', size: 'small' }, { default: () => row.risk_level }) },
-  { title: 'Status', key: 'status' },
-  { title: 'Reason', key: 'risk_reason' },
-  { title: 'Actions', key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => openDetail(row) }, { default: () => canReview.value ? 'Review' : 'View' }) }
-]
+const columns = computed<DataTableColumns<ReviewTask>>(() => [
+  { title: t('common.id'), key: 'id', width: 70 },
+  { title: t('common.title'), key: 'title' },
+  { title: t('reviews.risk'), key: 'risk_level', render: (row) => h(NTag, { type: row.risk_level === 'high' ? 'error' : 'warning', size: 'small' }, { default: () => statusLabel(row.risk_level) }) },
+  { title: t('common.status'), key: 'status', render: (row) => statusLabel(row.status) },
+  { title: t('reviews.reason'), key: 'risk_reason' },
+  { title: t('common.actions'), key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => openDetail(row) }, { default: () => canReview.value ? t('reviews.review') : t('common.view') }) }
+])
 
 async function loadTasks() {
   tasks.value = await api.getReviewTasks()
@@ -71,14 +75,14 @@ async function approve() {
   if (!selected.value) return
   selected.value = await api.approveReviewTask(selected.value.id, comment.value)
   await loadTasks()
-  message.success('Review approved')
+  message.success(t('reviews.approved'))
 }
 
 async function reject() {
   if (!selected.value) return
   selected.value = await api.rejectReviewTask(selected.value.id, comment.value)
   await loadTasks()
-  message.success('Review rejected')
+  message.success(t('reviews.rejected'))
 }
 
 onMounted(loadTasks)

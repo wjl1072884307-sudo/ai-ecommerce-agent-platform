@@ -2,10 +2,10 @@
   <section class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Tickets</h1>
-        <p class="page-subtitle">Track return, refund, complaint, and after-sales workflows.</p>
+        <h1 class="page-title">{{ t('tickets.title') }}</h1>
+        <p class="page-subtitle">{{ t('tickets.subtitle') }}</p>
       </div>
-      <n-button secondary @click="loadTickets">Refresh</n-button>
+      <n-button secondary @click="loadTickets">{{ t('common.refresh') }}</n-button>
     </div>
 
     <n-card size="small">
@@ -13,35 +13,35 @@
     </n-card>
 
     <n-drawer v-model:show="showDrawer" :width="560">
-      <n-drawer-content title="Ticket detail">
+      <n-drawer-content :title="t('tickets.detail')">
         <n-space v-if="selected" vertical>
           <n-descriptions bordered :column="1" size="small">
-            <n-descriptions-item label="Ticket No">{{ selected.ticket_no }}</n-descriptions-item>
-            <n-descriptions-item label="Type">{{ selected.ticket_type }}</n-descriptions-item>
-            <n-descriptions-item label="Order">{{ selected.order_id || '-' }}</n-descriptions-item>
-            <n-descriptions-item label="Priority">{{ selected.priority }}</n-descriptions-item>
-            <n-descriptions-item label="Status">{{ selected.status }}</n-descriptions-item>
-            <n-descriptions-item label="Assignee">{{ selected.assignee_id || '-' }}</n-descriptions-item>
-            <n-descriptions-item label="Description">{{ selected.description }}</n-descriptions-item>
+            <n-descriptions-item :label="t('tickets.ticketNo')">{{ selected.ticket_no }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.type')">{{ statusLabel(selected.ticket_type) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.order')">{{ selected.order_id || '-' }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.priority')">{{ statusLabel(selected.priority) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.status')">{{ statusLabel(selected.status) }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.assignee')">{{ selected.assignee_id || '-' }}</n-descriptions-item>
+            <n-descriptions-item :label="t('common.description')">{{ selected.description }}</n-descriptions-item>
           </n-descriptions>
 
           <template v-if="canHandleTickets">
             <n-space>
-              <n-button secondary @click="claimSelected">Claim</n-button>
+              <n-button secondary @click="claimSelected">{{ t('tickets.claim') }}</n-button>
               <n-select v-model:value="nextStatus" :options="statusOptions" class="status-select" />
             </n-space>
-            <n-input v-model:value="reason" placeholder="Status change reason" />
-            <n-input v-model:value="resolution" type="textarea" placeholder="Resolution" />
-            <n-button type="primary" @click="updateStatus">Update Status</n-button>
+            <n-input v-model:value="reason" :placeholder="t('tickets.reasonPlaceholder')" />
+            <n-input v-model:value="resolution" type="textarea" :placeholder="t('tickets.resolutionPlaceholder')" />
+            <n-button type="primary" @click="updateStatus">{{ t('tickets.updateStatus') }}</n-button>
           </template>
 
-          <n-card title="Status Timeline" size="small">
-            <n-empty v-if="!statusLogs.length" description="No status changes yet" />
+          <n-card :title="t('tickets.timeline')" size="small">
+            <n-empty v-if="!statusLogs.length" :description="t('tickets.noTimeline')" />
             <n-timeline v-else>
               <n-timeline-item
                 v-for="item in statusLogs"
                 :key="item.id"
-                :title="`${item.from_status} -> ${item.to_status}`"
+                :title="`${statusLabel(item.from_status)} -> ${statusLabel(item.to_status)}`"
                 :content="item.reason"
                 :time="formatTime(item.created_at)"
               />
@@ -57,11 +57,15 @@
 import { computed, h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import { NButton, NCard, NDataTable, NDescriptions, NDescriptionsItem, NDrawer, NDrawerContent, NEmpty, NInput, NSelect, NSpace, NTag, NTimeline, NTimelineItem, useMessage } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
 
 import { api, type Ticket, type TicketStatusLog } from '@/api/client'
 import { role } from '@/auth/session'
+import { useDisplayText } from '@/i18n/display'
 
 const message = useMessage()
+const { t } = useI18n()
+const { statusLabel } = useDisplayText()
 const tickets = ref<Ticket[]>([])
 const selected = ref<Ticket | null>(null)
 const statusLogs = ref<TicketStatusLog[]>([])
@@ -71,22 +75,16 @@ const reason = ref('Start after-sales handling')
 const resolution = ref('')
 const canHandleTickets = computed(() => role.value === 'admin' || role.value === 'reviewer' || role.value === 'agent')
 
-const statusOptions = [
-  { label: 'pending', value: 'pending' },
-  { label: 'processing', value: 'processing' },
-  { label: 'resolved', value: 'resolved' },
-  { label: 'closed', value: 'closed' },
-  { label: 'cancelled', value: 'cancelled' }
-]
+const statusOptions = computed(() => ['pending', 'processing', 'resolved', 'closed', 'cancelled'].map((value) => ({ label: statusLabel(value), value })))
 
-const columns: DataTableColumns<Ticket> = [
-  { title: 'Ticket No', key: 'ticket_no' },
-  { title: 'Type', key: 'ticket_type' },
-  { title: 'Order', key: 'order_id' },
-  { title: 'Priority', key: 'priority' },
-  { title: 'Status', key: 'status', render: (row) => h(NTag, { size: 'small' }, { default: () => row.status }) },
-  { title: 'Actions', key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => openDetail(row) }, { default: () => canHandleTickets.value ? 'Handle' : 'View' }) }
-]
+const columns = computed<DataTableColumns<Ticket>>(() => [
+  { title: t('tickets.ticketNo'), key: 'ticket_no' },
+  { title: t('common.type'), key: 'ticket_type', render: (row) => statusLabel(row.ticket_type) },
+  { title: t('common.order'), key: 'order_id' },
+  { title: t('common.priority'), key: 'priority', render: (row) => statusLabel(row.priority) },
+  { title: t('common.status'), key: 'status', render: (row) => h(NTag, { size: 'small' }, { default: () => statusLabel(row.status) }) },
+  { title: t('common.actions'), key: 'actions', render: (row) => h(NButton, { size: 'small', onClick: () => openDetail(row) }, { default: () => canHandleTickets.value ? t('tickets.handle') : t('common.view') }) }
+])
 
 async function loadTickets() {
   tickets.value = await api.getTickets()
@@ -105,7 +103,7 @@ async function claimSelected() {
   selected.value = await api.claimTicket(selected.value.id)
   statusLogs.value = await api.getTicketStatusLogs(selected.value.id)
   await loadTickets()
-  message.success('Ticket claimed')
+  message.success(t('tickets.claimed'))
 }
 
 async function updateStatus() {
@@ -113,7 +111,7 @@ async function updateStatus() {
   selected.value = await api.updateTicketStatus(selected.value.id, nextStatus.value, reason.value, resolution.value || undefined)
   statusLogs.value = await api.getTicketStatusLogs(selected.value.id)
   await loadTickets()
-  message.success('Ticket status updated')
+  message.success(t('tickets.updated'))
 }
 
 function formatTime(value: string) {

@@ -15,8 +15,8 @@ def test_get_product_returns_detail(client: TestClient) -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "星云降噪耳机"
-    assert data["category"] == "数码音频"
+    assert data["name"] == "Nebula Noise-Cancelling Headset"
+    assert data["category"] == "Digital Audio"
 
 
 def test_create_and_update_product(client: TestClient) -> None:
